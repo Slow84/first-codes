@@ -2,68 +2,100 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>로또 번호 추첨기</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로또 5줄 추첨기</title>
     <style>
         body {
             font-family: 'Malgun Gothic', sans-serif;
             text-align: center;
-            background-color: #f7f9fc;
-            padding-top: 50px;
+            background-color: #f0f2f5;
+            padding: 20px;
+            margin: 0;
         }
         .container {
             background: white;
             display: inline-block;
             padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            max-width: 500px;
+            width: 100%;
         }
-        h1 { color: #333; }
-        .balls-container {
-            margin: 30px 0;
+        h1 { color: #333; margin-bottom: 30px; }
+        
+        .lotto-paper {
+            background-color: #fff;
+            border: 2px dashed #ccc;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .row-container {
             display: flex;
+            align-items: center;
             justify-content: center;
-            gap: 15px;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
         }
+        .row-label {
+            font-weight: bold;
+            color: #888;
+            margin-right: 10px;
+            font-size: 0.9rem;
+        }
+
         .ball {
-            width: 50px;
-            height: 50px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            font-size: 1.2rem;
+            font-size: 1rem;
             color: white;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.2);
         }
-        /* 로또 공식 색상 적용 */
+
+        /* 로또 공식 색상 */
         .color-1 { background-color: #fbc02d; } /* 1~10 노랑 */
         .color-2 { background-color: #1e88e5; } /* 11~20 파랑 */
         .color-3 { background-color: #e53935; } /* 21~30 빨강 */
         .color-4 { background-color: #8e24aa; } /* 31~40 보라 */
         .color-5 { background-color: #43a047; } /* 41~45 초록 */
+
         button {
-            padding: 12px 25px;
-            font-size: 1rem;
+            padding: 15px 30px;
+            font-size: 1.1rem;
             font-weight: bold;
-            background-color: #007bff;
+            background-color: #ff4757;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 50px;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: transform 0.2s, background 0.2s;
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
         }
-        button:hover { background-color: #0056b3; }
+        button:hover { 
+            background-color: #ff6b81;
+            transform: translateY(-2px);
+        }
+        button:active {
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>✨ 로또 번호 추첨기 ✨</h1>
-    <div class="balls-container" id="balls">
-        <!-- 번호가 여기에 생성됩니다 -->
+    <h1>🎟️ 로또 6/45 추첨 🎟️</h1>
+    <div class="lotto-paper" id="lotto-paper">
+        <!-- 5줄의 번호가 여기에 생성됩니다 -->
     </div>
-    <button onclick="drawLotto()">번호 추첨하기</button>
+    <button onclick="drawAllRows()">새로 추첨하기</button>
 </div>
 
 <script>
@@ -75,7 +107,7 @@
         return 'color-5';
     }
 
-    function drawLotto() {
+    function generateLottoNumbers() {
         const numbers = [];
         while (numbers.length < 6) {
             const num = Math.floor(Math.random() * 45) + 1;
@@ -83,21 +115,38 @@
                 numbers.push(num);
             }
         }
-        numbers.sort((a, b) => a - b);
-
-        const ballsContainer = document.getElementById('balls');
-        ballsContainer.innerHTML = '';
-
-        numbers.forEach(num => {
-            const ball = document.createElement('div');
-            ball.className = `ball ${getBallColorClass(num)}`;
-            ball.innerText = num;
-            ballsContainer.appendChild(ball);
-        });
+        return numbers.sort((a, b) => a - b);
     }
 
-    // 페이지 로드시 자동 첫 실행
-    drawLotto();
+    function drawAllRows() {
+        const paper = document.getElementById('lotto-paper');
+        paper.innerHTML = '';
+        const alphabet = ['A', 'B', 'C', 'D', 'E'];
+
+        for (let i = 0; i < 5; i++) {
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'row-container';
+            
+            // 행 라벨 (A, B, C, D, E)
+            const label = document.createElement('span');
+            label.className = 'row-label';
+            label.innerText = alphabet[i];
+            rowDiv.appendChild(label);
+
+            const numbers = generateLottoNumbers();
+            numbers.forEach(num => {
+                const ball = document.createElement('div');
+                ball.className = `ball ${getBallColorClass(num)}`;
+                ball.innerText = num;
+                rowDiv.appendChild(ball);
+            });
+
+            paper.appendChild(rowDiv);
+        }
+    }
+
+    // 초기 실행
+    drawAllRows();
 </script>
 </body>
 </html>
