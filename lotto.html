@@ -3,99 +3,200 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>로또 5줄 추첨기</title>
+    <title>연금복권 스타일 로또 추첨기</title>
     <style>
+        :root {
+            --lotto-red: #e53935;
+            --lotto-blue: #1e88e5;
+            --paper-bg: #fdfdfd;
+        }
+
         body {
-            font-family: 'Malgun Gothic', sans-serif;
-            text-align: center;
-            background-color: #f0f2f5;
-            padding: 20px;
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            background-color: #d1d8e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
             margin: 0;
-        }
-        .container {
-            background: white;
-            display: inline-block;
-            padding: 30px;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            max-width: 500px;
-            width: 100%;
-        }
-        h1 { color: #333; margin-bottom: 30px; }
-        
-        .lotto-paper {
-            background-color: #fff;
-            border: 2px dashed #ccc;
             padding: 20px;
-            margin-bottom: 25px;
+        }
+
+        .ticket-container {
+            background-color: var(--paper-bg);
+            width: 100%;
+            max-width: 450px;
+            padding: 40px 20px;
+            position: relative;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            border-radius: 5px;
+            /* 실제 복권 종이 질감 느낌을 위한 배경 처리 */
+            background-image: 
+                radial-gradient(#f0f0f0 1px, transparent 1px),
+                linear-gradient(rgba(240, 240, 240, 0.5) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(240, 240, 240, 0.5) 1px, transparent 1px);
+            background-size: 20px 20px, 40px 40px, 40px 40px;
+        }
+
+        /* 복권 상단 장식 */
+        .ticket-header {
+            border-bottom: 2px solid #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            position: relative;
+        }
+
+        .ticket-header h1 {
+            font-size: 1.8rem;
+            color: #222;
+            margin: 0;
+            letter-spacing: 2px;
+        }
+
+        .ticket-header .serial {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.8rem;
+            color: #777;
+            position: absolute;
+            top: -25px;
+            right: 0;
+        }
+
+        /* 실제 복권같은 워터마크 효과 */
+        .watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-30deg);
+            font-size: 5rem;
+            color: rgba(0, 0, 0, 0.03);
+            font-weight: bold;
+            pointer-events: none;
+            white-space: nowrap;
+            z-index: 0;
+        }
+
+        .lotto-paper {
+            position: relative;
+            z-index: 1;
+            background: rgba(255, 255, 255, 0.6);
+            padding: 15px;
+            border: 1px solid #ddd;
         }
 
         .row-container {
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 10px;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            padding: 8px 5px;
+            border-bottom: 1px dashed #ccc;
         }
+
         .row-label {
             font-weight: bold;
-            color: #888;
-            margin-right: 10px;
-            font-size: 0.9rem;
+            font-style: italic;
+            color: #555;
+            width: 30px;
+        }
+
+        .balls-wrapper {
+            display: flex;
+            gap: 8px;
         }
 
         .ball {
-            width: 40px;
-            height: 40px;
+            width: 38px;
+            height: 38px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            font-size: 1rem;
-            color: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            text-shadow: 1px 1px 1px rgba(0,0,0,0.2);
+            font-size: 1.1rem;
+            color: #333;
+            background: white;
+            border: 2px solid #444;
+            box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
         }
 
-        /* 로또 공식 색상 */
-        .color-1 { background-color: #fbc02d; } /* 1~10 노랑 */
-        .color-2 { background-color: #1e88e5; } /* 11~20 파랑 */
-        .color-3 { background-color: #e53935; } /* 21~30 빨강 */
-        .color-4 { background-color: #8e24aa; } /* 31~40 보라 */
-        .color-5 { background-color: #43a047; } /* 41~45 초록 */
+        /* 실제 번호 마킹 느낌을 위해 색상 테두리만 적용 (복권 스타일) */
+        .color-1 { border-color: #fbc02d; color: #b79500; } 
+        .color-2 { border-color: #1e88e5; color: #1565c0; } 
+        .color-3 { border-color: #e53935; color: #c62828; } 
+        .color-4 { border-color: #8e24aa; color: #6a1b9a; } 
+        .color-5 { border-color: #43a047; color: #2e7d32; }
 
-        button {
-            padding: 15px 30px;
-            font-size: 1.1rem;
+        .ticket-footer {
+            margin-top: 30px;
+            font-size: 0.8rem;
+            color: #666;
+            text-align: left;
+            line-height: 1.5;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+        }
+
+        .btn-draw {
+            margin-top: 25px;
+            padding: 15px 40px;
+            font-size: 1.2rem;
             font-weight: bold;
-            background-color: #ff4757;
+            background-color: #333;
             color: white;
             border: none;
-            border-radius: 50px;
+            border-radius: 3px;
             cursor: pointer;
-            transition: transform 0.2s, background 0.2s;
-            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
+            transition: all 0.3s;
+            width: 100%;
+            text-transform: uppercase;
         }
-        button:hover { 
-            background-color: #ff6b81;
-            transform: translateY(-2px);
+
+        .btn-draw:hover {
+            background-color: #000;
+            letter-spacing: 1px;
         }
-        button:active {
-            transform: translateY(0);
+
+        /* 사이드 펀치 구멍 효과 */
+        .ticket-container::before, .ticket-container::after {
+            content: '';
+            position: absolute;
+            left: -10px;
+            width: 20px;
+            height: 20px;
+            background-color: #d1d8e0;
+            border-radius: 50%;
+        }
+        .ticket-container::before { top: 20%; }
+        .ticket-container::after { bottom: 20%; }
+
+        @media (max-width: 400px) {
+            .ball { width: 32px; height: 32px; font-size: 0.9rem; }
+            .balls-wrapper { gap: 5px; }
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>🎟️ 로또 6/45 추첨 🎟️</h1>
-    <div class="lotto-paper" id="lotto-paper">
-        <!-- 5줄의 번호가 여기에 생성됩니다 -->
+<div class="ticket-container">
+    <div class="watermark">LOTTO 6/45</div>
+    
+    <div class="ticket-header">
+        <span class="serial" id="serial-num">TR-20260814-0001</span>
+        <h1>LOTTO 6/45</h1>
     </div>
-    <button onclick="drawAllRows()">새로 추첨하기</button>
+
+    <div class="lotto-paper" id="lotto-paper">
+        <!-- 5줄 번호 -->
+    </div>
+
+    <div class="ticket-footer">
+        * 본 권은 실제 복권이 아닙니다. 재미로만 즐겨주세요.<br>
+        * 추첨일시: <span id="current-time"></span><br>
+        * 판매점: Gemini AI Lucky Shop
+    </div>
+
+    <button class="btn-draw" onclick="drawAllRows()">PURCHASE / DRAW</button>
 </div>
 
 <script>
@@ -118,6 +219,17 @@
         return numbers.sort((a, b) => a - b);
     }
 
+    function updateTimeAndSerial() {
+        const now = new Date();
+        document.getElementById('current-time').innerText = now.toLocaleString();
+        
+        const randomSerial = 'TR-' + now.getFullYear() + 
+            String(now.getMonth() + 1).padStart(2, '0') + 
+            String(now.getDate()).padStart(2, '0') + '-' + 
+            Math.floor(Math.random() * 9000 + 1000);
+        document.getElementById('serial-num').innerText = randomSerial;
+    }
+
     function drawAllRows() {
         const paper = document.getElementById('lotto-paper');
         paper.innerHTML = '';
@@ -127,22 +239,26 @@
             const rowDiv = document.createElement('div');
             rowDiv.className = 'row-container';
             
-            // 행 라벨 (A, B, C, D, E)
             const label = document.createElement('span');
             label.className = 'row-label';
             label.innerText = alphabet[i];
             rowDiv.appendChild(label);
+
+            const ballsWrapper = document.createElement('div');
+            ballsWrapper.className = 'balls-wrapper';
 
             const numbers = generateLottoNumbers();
             numbers.forEach(num => {
                 const ball = document.createElement('div');
                 ball.className = `ball ${getBallColorClass(num)}`;
                 ball.innerText = num;
-                rowDiv.appendChild(ball);
+                ballsWrapper.appendChild(ball);
             });
 
+            rowDiv.appendChild(ballsWrapper);
             paper.appendChild(rowDiv);
         }
+        updateTimeAndSerial();
     }
 
     // 초기 실행
