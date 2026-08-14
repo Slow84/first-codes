@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>로또 번호 추첨기</title>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            text-align: center;
+            background-color: #f7f9fc;
+            padding-top: 50px;
+        }
+        .container {
+            background: white;
+            display: inline-block;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        .balls-container {
+            margin: 30px 0;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        .ball {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        /* 로또 공식 색상 적용 */
+        .color-1 { background-color: #fbc02d; } /* 1~10 노랑 */
+        .color-2 { background-color: #1e88e5; } /* 11~20 파랑 */
+        .color-3 { background-color: #e53935; } /* 21~30 빨강 */
+        .color-4 { background-color: #8e24aa; } /* 31~40 보라 */
+        .color-5 { background-color: #43a047; } /* 41~45 초록 */
+        button {
+            padding: 12px 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>✨ 로또 번호 추첨기 ✨</h1>
+    <div class="balls-container" id="balls">
+        <!-- 번호가 여기에 생성됩니다 -->
+    </div>
+    <button onclick="drawLotto()">번호 추첨하기</button>
+</div>
+
+<script>
+    function getBallColorClass(num) {
+        if (num <= 10) return 'color-1';
+        if (num <= 20) return 'color-2';
+        if (num <= 30) return 'color-3';
+        if (num <= 40) return 'color-4';
+        return 'color-5';
+    }
+
+    function drawLotto() {
+        const numbers = [];
+        while (numbers.length < 6) {
+            const num = Math.floor(Math.random() * 45) + 1;
+            if (!numbers.includes(num)) {
+                numbers.push(num);
+            }
+        }
+        numbers.sort((a, b) => a - b);
+
+        const ballsContainer = document.getElementById('balls');
+        ballsContainer.innerHTML = '';
+
+        numbers.forEach(num => {
+            const ball = document.createElement('div');
+            ball.className = `ball ${getBallColorClass(num)}`;
+            ball.innerText = num;
+            ballsContainer.appendChild(ball);
+        });
+    }
+
+    // 페이지 로드시 자동 첫 실행
+    drawLotto();
+</script>
+</body>
+</html>
