@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>제휴 및 비즈니스 문의</title>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .form-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: #333;
+            font-size: 1.8rem;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        p.subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #444;
+        }
+        input[type="text"],
+        input[type="email"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        textarea {
+            height: 150px;
+            resize: vertical;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #007bff;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="form-container">
+    <h1>🤝 제휴 및 비즈니스 문의</h1>
+    <p class="subtitle">협업 제안이나 문의사항을 남겨주시면 검토 후 연락드리겠습니다.</p>
+
+    <!-- Formspree 연동 폼 -->
+    <form action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
+        <div class="form-group">
+            <label for="name">성함 / 업체명</label>
+            <input type="text" id="name" name="name" placeholder="이름 또는 회사명을 입력하세요" required>
+        </div>
+
+        <div class="form-group">
+            <label for="email">회신받을 이메일</label>
+            <input type="email" id="email" name="_replyto" placeholder="example@email.com" required>
+        </div>
+
+        <div class="form-group">
+            <label for="category">문의 유형</label>
+            <select id="category" name="category">
+                <option value="제휴문의">광고/제휴 문의</option>
+                <option value="기술문의">시스템/기술 문의</option>
+                <option value="기타">기타 문의</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="message">문의 내용</label>
+            <textarea id="message" name="message" placeholder="자세한 문의 내용을 적어주세요" required></textarea>
+        </div>
+
+        <!-- 스팸 방지 및 성공 후 이동 페이지 (선택사항) -->
+        <input type="hidden" name="_subject" value="새로운 제휴 문의가 접수되었습니다!">
+        
+        <button type="submit">문의 보내기</button>
+    </form>
+
+    <a href="index.html" class="back-link">← 메인으로 돌아가기</a>
+</div>
+
+</body>
+</html>
