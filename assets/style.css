@@ -237,9 +237,49 @@ a { color: inherit; }
   display: inline-block;
 }
 
+.hamburger-toggle {
+  display: none;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.hamburger-toggle svg { width: 18px; height: 18px; }
+
+.mobile-panel {
+  display: none;
+  flex-direction: column;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.2s ease, padding 0.2s ease;
+}
+
+.mobile-panel a {
+  color: var(--text);
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.mobile-panel a:last-child { border-bottom: none; }
+
 @media (max-width: 860px) {
   .nav-links { display: none; }
   .mega { display: none !important; }
+  .hamburger-toggle { display: flex; }
+  .mobile-panel { display: flex; }
+  .mobile-panel.open { max-height: 240px; padding: 8px 24px 16px; }
 }
 
 /* ---------- Generic layout helpers ---------- */
@@ -551,3 +591,53 @@ footer.pagefoot {
 }
 footer.pagefoot a { color: var(--text-muted); text-decoration: none; }
 footer.pagefoot a:hover { color: var(--accent); }
+
+/* hero orb */
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 40px;
+  align-items: center;
+}
+
+.hero-visual {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+}
+
+.hero-visual::before {
+  content: '';
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(34,211,238,0.28) 0%, rgba(67,56,202,0.16) 45%, transparent 72%);
+  filter: blur(6px);
+}
+
+#hero-orb {
+  position: relative;
+  width: 280px;
+  height: 280px;
+}
+
+#hero-orb canvas { display: block; }
+
+@media (max-width: 860px) {
+  .hero-grid { grid-template-columns: 1fr; }
+  .hero-visual { display: none; }
+}
+
+/* sitemap directory page */
+.sitemap-section { margin-bottom: 36px; }
+.sitemap-section h2 { font-size: 18px; margin-bottom: 16px; }
+.sitemap-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 24px; }
+.sitemap-list li { border-bottom: 1px solid var(--border); }
+.sitemap-list a {
+  display: block; padding: 10px 0; color: var(--text); text-decoration: none; font-size: 14px; font-weight: 600;
+}
+.sitemap-list a:hover { color: var(--accent); }
+@media (max-width: 600px) { .sitemap-list { grid-template-columns: 1fr; } }

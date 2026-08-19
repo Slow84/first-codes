@@ -31,26 +31,16 @@
     return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
   }
 
-  function syncGiscusTheme(mode) {
-    var iframe = document.querySelector('iframe.giscus-frame');
-    if (!iframe || !iframe.contentWindow) return;
-    iframe.contentWindow.postMessage({ giscus: { setConfig: { theme: mode } } }, 'https://giscus.app');
-  }
-
   function setTheme(mode) {
     document.documentElement.setAttribute('data-theme', mode);
     try { localStorage.setItem('sloworld-theme', mode); } catch (e) {}
-    syncGiscusTheme(mode);
   }
 
-  // giscus announces readiness via postMessage once its iframe has loaded;
-  // sync it to whatever theme is currently active at that point.
-  window.addEventListener('message', function (event) {
-    if (event.origin !== 'https://giscus.app') return;
-    if (event.data && event.data.giscus && event.data.giscus.discussion !== undefined) {
-      syncGiscusTheme(currentTheme());
-    }
-  });
+  function removeTopNavCta() {
+    document.querySelectorAll('.nav-inner .nav-cta').forEach(function (el) {
+      el.remove();
+    });
+  }
 
   function setupThemeToggles() {
     document.querySelectorAll('.nav-inner').forEach(function (navInner) {
@@ -65,14 +55,52 @@
       btn.addEventListener('click', function () {
         setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
       });
-      var cta = navInner.querySelector('.nav-cta');
-      if (cta) navInner.insertBefore(btn, cta);
-      else navInner.appendChild(btn);
+      navInner.appendChild(btn);
+    });
+  }
+
+  var MOBILE_LINKS = [
+    { href: '/economy/index.html', label: '경제' },
+    { href: '/life/index.html', label: '생활' },
+    { href: '/etc/lotto.html', label: '기타' }
+  ];
+
+  function setupMobileMenu() {
+    document.querySelectorAll('.nav-inner').forEach(function (navInner) {
+      if (navInner.querySelector('.hamburger-toggle')) return;
+
+      var hamburger = document.createElement('button');
+      hamburger.type = 'button';
+      hamburger.className = 'hamburger-toggle';
+      hamburger.setAttribute('aria-label', '메뉴 열기');
+      hamburger.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+      navInner.appendChild(hamburger);
+
+      var panel = document.createElement('div');
+      panel.className = 'mobile-panel';
+      panel.innerHTML = MOBILE_LINKS.map(function (l) {
+        return '<a href="' + l.href + '">' + l.label + '</a>';
+      }).join('');
+
+      var topbar = navInner.closest('.topbar');
+      if (topbar) topbar.appendChild(panel);
+
+      hamburger.addEventListener('click', function (e) {
+        e.stopPropagation();
+        panel.classList.toggle('open');
+      });
+      document.addEventListener('click', function (e) {
+        if (!panel.contains(e.target) && e.target !== hamburger) {
+          panel.classList.remove('open');
+        }
+      });
     });
   }
 
   // script is loaded with `defer`, so the DOM is already parsed by the time
   // this runs — call directly instead of waiting on DOMContentLoaded.
   setupMegaMenus();
+  removeTopNavCta();
   setupThemeToggles();
+  setupMobileMenu();
 })();

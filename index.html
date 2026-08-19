@@ -61,32 +61,38 @@
 </nav>
 
 <section class="section">
-  <div class="section-inner">
-    <span class="eyebrow">SLOWORLD</span>
-    <h1 style="font-size: clamp(34px, 5vw, 52px); max-width: 16ch;">느리게, 그러나 꾸준히 쌓아가는 관심사들</h1>
-    <p style="font-size: 16px; color: var(--text-muted); max-width: 52ch; margin: 20px 0 28px;">경제 상식부터 육아·생활 도구, 소소한 재미까지 — 한 사람이 관심 있는 걸 하나씩 정리해 나가는 공간이에요. 카테고리는 계속 늘어날 예정입니다.</p>
-    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-      <a href="/economy/index.html" class="pill-btn accent">경제 상식 둘러보기</a>
-      <a href="/life/menu.html" class="pill-btn outline">생활 도구 써보기</a>
+  <div class="section-inner hero-grid">
+    <div>
+      <span class="eyebrow">SLOWORLD</span>
+      <h1 style="font-size: clamp(34px, 5vw, 52px); max-width: 16ch;">느리게, 그러나 꾸준히 쌓아가는 관심사들</h1>
+      <p style="font-size: 16px; color: var(--text-muted); max-width: 52ch; margin: 20px 0 28px;">경제 상식부터 육아·생활 도구, 소소한 재미까지 — 한 사람이 관심 있는 걸 하나씩 정리해 나가는 공간이에요. 카테고리는 계속 늘어날 예정입니다.</p>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="/economy/index.html" class="pill-btn accent">경제 상식 둘러보기</a>
+        <a href="/life/menu.html" class="pill-btn outline">생활 도구 써보기</a>
+      </div>
+
+      <div class="stat-grid">
+        <div>
+          <div class="stat-label">카테고리</div>
+          <div class="stat-value">3</div>
+        </div>
+        <div>
+          <div class="stat-label">경제 상식 글</div>
+          <div class="stat-value">15</div>
+        </div>
+        <div>
+          <div class="stat-label">생활 추천 도구</div>
+          <div class="stat-value">2</div>
+        </div>
+        <div>
+          <div class="stat-label">기타 도구</div>
+          <div class="stat-value">1</div>
+        </div>
+      </div>
     </div>
 
-    <div class="stat-grid">
-      <div>
-        <div class="stat-label">카테고리</div>
-        <div class="stat-value">3</div>
-      </div>
-      <div>
-        <div class="stat-label">경제 상식 글</div>
-        <div class="stat-value">15</div>
-      </div>
-      <div>
-        <div class="stat-label">생활 추천 도구</div>
-        <div class="stat-value">2</div>
-      </div>
-      <div>
-        <div class="stat-label">기타 도구</div>
-        <div class="stat-value">1</div>
-      </div>
+    <div class="hero-visual" aria-hidden="true">
+      <div id="hero-orb"></div>
     </div>
   </div>
 </section>
@@ -135,29 +141,24 @@
   <div class="section-inner" style="max-width: 780px;">
     <span class="eyebrow">댓글</span>
     <h2 style="font-size: 22px; margin-bottom: 20px;">한마디 남겨주세요</h2>
-    <script src="https://giscus.app/client.js"
-        data-repo="Slow84/first-codes"
-        data-repo-id="R_kgDOT3799g"
-        data-category="General"
-        data-category-id="DIC_kwDOT3799s4DDsWL"
-        data-mapping="pathname"
-        data-strict="0"
-        data-reactions-enabled="1"
-        data-emit-metadata="0"
-        data-input-position="bottom"
-        data-theme="light"
-        data-lang="ko"
-        crossorigin="anonymous"
-        async>
-    </script>
+    <div id="cusdis_thread"
+      data-host="https://cusdis.com"
+      data-app-id="476013b1-63d2-4940-a44a-20d0438f23f2"
+      data-page-id="home"
+      data-page-url="https://sloworld.xyz/"
+      data-page-title="sloworld"
+      data-theme="light"
+    ></div>
+    <script async defer src="https://cusdis.com/js/cusdis.es.js"></script>
   </div>
 </section>
 
 <footer class="pagefoot">
   <span>sloworld</span>
-  <span><a href="/economy/index.html">경제</a> · <a href="/life/index.html">생활</a> · <a href="/etc/lotto.html">기타</a> · <a href="/inquiry.html">제휴 문의</a> · <a href="/privacy.html">개인정보처리방침</a></span>
+  <span><a href="/sitemap.html">사이트맵</a> · <a href="/privacy.html">개인정보처리방침</a></span>
 </footer>
 
 <script src="/assets/nav.js" defer></script>
+<script type="module" src="/assets/hero-orb.js"></script>
 </body>
 </html>
