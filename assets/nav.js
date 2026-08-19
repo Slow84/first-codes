@@ -31,10 +31,26 @@
     return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
   }
 
+  function syncGiscusTheme(mode) {
+    var iframe = document.querySelector('iframe.giscus-frame');
+    if (!iframe || !iframe.contentWindow) return;
+    iframe.contentWindow.postMessage({ giscus: { setConfig: { theme: mode } } }, 'https://giscus.app');
+  }
+
   function setTheme(mode) {
     document.documentElement.setAttribute('data-theme', mode);
     try { localStorage.setItem('sloworld-theme', mode); } catch (e) {}
+    syncGiscusTheme(mode);
   }
+
+  // giscus announces readiness via postMessage once its iframe has loaded;
+  // sync it to whatever theme is currently active at that point.
+  window.addEventListener('message', function (event) {
+    if (event.origin !== 'https://giscus.app') return;
+    if (event.data && event.data.giscus && event.data.giscus.discussion !== undefined) {
+      syncGiscusTheme(currentTheme());
+    }
+  });
 
   function setupThemeToggles() {
     document.querySelectorAll('.nav-inner').forEach(function (navInner) {
