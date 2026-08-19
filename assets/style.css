@@ -166,7 +166,7 @@ a { color: inherit; }
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s linear 0.18s;
+  transition: opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1), transform 0.38s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.38s;
 }
 
 .nav-item.open .mega {
@@ -174,7 +174,7 @@ a { color: inherit; }
   visibility: visible;
   pointer-events: auto;
   transform: translateX(-50%) translateY(0);
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition: opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1), transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .mega-cols {
@@ -623,7 +623,9 @@ footer.pagefoot a:hover { color: var(--accent); }
 
 @media (max-width: 860px) {
   .hero-grid { grid-template-columns: 1fr; }
-  .hero-visual { display: none; }
+  .hero-visual { height: 220px; margin-top: 12px; }
+  .hero-visual::before { width: 190px; height: 190px; }
+  #hero-orb { width: 210px; height: 210px; }
 }
 
 /* sitemap directory page */

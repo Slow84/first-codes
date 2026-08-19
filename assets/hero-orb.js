@@ -5,74 +5,111 @@ if (container && window.WebGLRenderingContext) {
   const size = container.clientWidth || 280;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.z = 3.4;
+  const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 60);
+  camera.position.set(0, 0, 1);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(size, size);
   container.appendChild(renderer.domElement);
 
-  const group = new THREE.Group();
-  scene.add(group);
+  // soft round sprite for bokeh dots, drawn once onto a canvas
+  function makeSoftDot() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.4, 'rgba(255,255,255,0.6)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+  const dotTexture = makeSoftDot();
 
-  // core wireframe geodesic sphere — vertices get pushed outward in
-  // localized "spikes" that pulse in and out, like something alive
-  const coreGeo = new THREE.IcosahedronGeometry(1, 3);
-  const coreMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: true, transparent: true, opacity: 0.9 });
-  const core = new THREE.Mesh(coreGeo, coreMat);
-  group.add(core);
-
-  const corePos = coreGeo.attributes.position;
-  const baseCore = corePos.array.slice();
-  const vertexCount = corePos.count;
-  const vertexDirs = [];
-  for (let i = 0; i < vertexCount; i++) {
-    const x = baseCore[i * 3], y = baseCore[i * 3 + 1], z = baseCore[i * 3 + 2];
-    const len = Math.sqrt(x * x + y * y + z * z) || 1;
-    vertexDirs.push([x / len, y / len, z / len]);
+  const PALETTE = [0x22d3ee, 0x67e8f9, 0x8b85f5, 0x4338ca, 0xf0a86a];
+  function pickColor() {
+    return new THREE.Color(PALETTE[Math.floor(Math.random() * PALETTE.length)]);
   }
 
-  // a few independent "spike" directions, each pulsing on its own timer
-  const spikes = [
-    { dir: [0.8, 0.5, 0.33], speed: 0.9, phase: 0, sharpness: 10, amp: 0.55 },
-    { dir: [-0.6, -0.2, 0.77], speed: 0.7, phase: 2.1, sharpness: 14, amp: 0.4 },
-    { dir: [0.1, -0.9, -0.4], speed: 1.1, phase: 4.2, sharpness: 12, amp: 0.45 }
-  ].map(s => {
-    const len = Math.hypot(s.dir[0], s.dir[1], s.dir[2]);
-    s.dir = [s.dir[0] / len, s.dir[1] / len, s.dir[2] / len];
-    return s;
-  });
+  // ---- warp streaks: short line segments flying toward the camera ----
+  const STREAK_COUNT = 140;
+  const TUNNEL_RADIUS = 1.1;
+  const FAR_Z = -18;
+  const NEAR_Z = 0.6;
+  const streakLen = 0.9;
 
-  function updateSpikes(t) {
-    for (let i = 0; i < vertexCount; i++) {
-      const [dx, dy, dz] = vertexDirs[i];
-      let push = 0;
-      for (const s of spikes) {
-        const dot = dx * s.dir[0] + dy * s.dir[1] + dz * s.dir[2];
-        const lobe = Math.max(0, dot) ** s.sharpness;
-        const pulse = Math.max(0, Math.sin(t * s.speed + s.phase));
-        push += lobe * pulse * s.amp;
-      }
-      const scale = 1 + push;
-      corePos.array[i * 3] = baseCore[i * 3] * scale;
-      corePos.array[i * 3 + 1] = baseCore[i * 3 + 1] * scale;
-      corePos.array[i * 3 + 2] = baseCore[i * 3 + 2] * scale;
+  const streakPositions = new Float32Array(STREAK_COUNT * 2 * 3);
+  const streakColors = new Float32Array(STREAK_COUNT * 2 * 3);
+  const streakData = [];
+
+  function resetStreak(i) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * TUNNEL_RADIUS;
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    const z = FAR_Z - Math.random() * 10;
+    const speed = 5 + Math.random() * 6;
+    const color = pickColor();
+    streakData[i] = { x, y, z, speed, color };
+  }
+  for (let i = 0; i < STREAK_COUNT; i++) resetStreak(i);
+
+  function writeStreakBuffers() {
+    for (let i = 0; i < STREAK_COUNT; i++) {
+      const d = streakData[i];
+      const i6 = i * 6;
+      // tail (farther) -> head (closer)
+      streakPositions[i6] = d.x;
+      streakPositions[i6 + 1] = d.y;
+      streakPositions[i6 + 2] = d.z - streakLen;
+      streakPositions[i6 + 3] = d.x;
+      streakPositions[i6 + 4] = d.y;
+      streakPositions[i6 + 5] = d.z;
+
+      const fade = Math.max(0, Math.min(1, (d.z - FAR_Z) / (NEAR_Z - FAR_Z)));
+      const c = d.color;
+      streakColors[i6] = c.r * fade;
+      streakColors[i6 + 1] = c.g * fade;
+      streakColors[i6 + 2] = c.b * fade;
+      streakColors[i6 + 3] = c.r;
+      streakColors[i6 + 4] = c.g;
+      streakColors[i6 + 5] = c.b;
     }
-    corePos.needsUpdate = true;
   }
+  writeStreakBuffers();
 
-  // faint outer shell, slightly larger, rotates opposite direction
-  const outerGeo = new THREE.IcosahedronGeometry(1.35, 1);
-  const outerMat = new THREE.MeshBasicMaterial({ color: 0x4338ca, wireframe: true, transparent: true, opacity: 0.35 });
-  const outer = new THREE.Mesh(outerGeo, outerMat);
-  group.add(outer);
+  const streakGeo = new THREE.BufferGeometry();
+  streakGeo.setAttribute('position', new THREE.BufferAttribute(streakPositions, 3));
+  streakGeo.setAttribute('color', new THREE.BufferAttribute(streakColors, 3));
+  const streakMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 });
+  const streaks = new THREE.LineSegments(streakGeo, streakMat);
+  scene.add(streaks);
 
-  // scattered point cloud on a third shell for a "particle" feel
-  const dotGeo = new THREE.IcosahedronGeometry(1.15, 4);
-  const dotMat = new THREE.PointsMaterial({ color: 0x67e8f9, size: 0.02, transparent: true, opacity: 0.9 });
-  const dots = new THREE.Points(dotGeo, dotMat);
-  group.add(dots);
+  // ---- soft drifting bokeh points scattered around the tunnel mouth ----
+  const BOKEH_COUNT = 40;
+  const bokehPos = new Float32Array(BOKEH_COUNT * 3);
+  for (let i = 0; i < BOKEH_COUNT; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = 0.6 + Math.random() * 1.6;
+    bokehPos[i * 3] = Math.cos(angle) * r;
+    bokehPos[i * 3 + 1] = Math.sin(angle) * r;
+    bokehPos[i * 3 + 2] = -1 - Math.random() * 6;
+  }
+  const bokehGeo = new THREE.BufferGeometry();
+  bokehGeo.setAttribute('position', new THREE.BufferAttribute(bokehPos, 3));
+  const bokehMat = new THREE.PointsMaterial({
+    size: 0.18,
+    map: dotTexture,
+    color: 0x9fe8ff,
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const bokeh = new THREE.Points(bokehGeo, bokehMat);
+  scene.add(bokeh);
 
   function onResize() {
     const s = container.clientWidth || 280;
@@ -84,13 +121,21 @@ if (container && window.WebGLRenderingContext) {
   let frame;
   function animate() {
     frame = requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
     const t = clock.getElapsedTime();
-    updateSpikes(t);
-    core.rotation.y += 0.006;
-    core.rotation.x += 0.002;
-    outer.rotation.y -= 0.003;
-    outer.rotation.x -= 0.0012;
-    dots.rotation.y += 0.004;
+
+    for (let i = 0; i < STREAK_COUNT; i++) {
+      const d = streakData[i];
+      d.z += d.speed * dt;
+      if (d.z > NEAR_Z) resetStreak(i);
+    }
+    writeStreakBuffers();
+    streakGeo.attributes.position.needsUpdate = true;
+    streakGeo.attributes.color.needsUpdate = true;
+
+    bokeh.rotation.z = t * 0.02;
+    scene.rotation.z = Math.sin(t * 0.15) * 0.06;
+
     renderer.render(scene, camera);
   }
   animate();
@@ -100,6 +145,7 @@ if (container && window.WebGLRenderingContext) {
     if (document.hidden) {
       cancelAnimationFrame(frame);
     } else {
+      clock.getDelta(); // drop the paused-time gap
       animate();
     }
   });
