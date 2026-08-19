@@ -3,610 +3,137 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>sloworld · 1~3세 영유아 저녁메뉴 추천기</title>
-<meta name="description" content="1~3세 유아식 저녁메뉴를 랜덤으로 추천해주는 도구와 영양 가이드, 주간 식단표를 제공합니다.">
+<title>sloworld</title>
+<meta name="description" content="경제 상식, 육아·생활 도구, 그리고 소소한 재미까지 — 한 사람의 관심사를 차곡차곡 정리하는 공간입니다.">
 <meta name="google-adsense-account" content="ca-pub-2127159739328027">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2127159739328027" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --mustard: #EFC761;
-    --mustard-deep: #E0AF3A;
-    --mustard-soft: #FBF0D5;
-    --ink: #17140F;
-    --paper: #FFFDF8;
-    --surface: #FFFFFF;
-    --text-muted: #6B6255;
-    --lavender: #C9B7E8;
-    --lavender-soft: #F1EBFA;
-    --warn: #B23A2E;
-    --warn-soft: #F7E3DE;
-    --border: var(--ink);
-  }
-
-  * { box-sizing: border-box; }
-  html, body { height: 100%; }
-
-  body {
-    margin: 0;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: 'Inter', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
-    line-height: 1.6;
-  }
-
-  h1, h2, .display {
-    font-family: 'Archivo Black', 'Inter', sans-serif;
-    font-weight: 400;
-    letter-spacing: -0.01em;
-  }
-
-  .topbar {
-    background: var(--mustard);
-    border-bottom: 3px solid var(--ink);
-  }
-
-  .nav-inner {
-    max-width: 1120px;
-    margin: 0 auto;
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    gap: 24px;
-  }
-
-  .logo {
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 18px;
-    color: var(--ink);
-    text-decoration: none;
-    flex-shrink: 0;
-  }
-
-  .nav-links {
-    display: flex;
-    gap: 20px;
-    flex: 1;
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  .nav-links a {
-    color: var(--ink);
-    text-decoration: none;
-    opacity: 0.75;
-  }
-
-  .nav-links a:hover, .nav-links a.active { opacity: 1; text-decoration: underline; }
-
-  .nav-cta {
-    background: var(--ink);
-    color: var(--mustard);
-    font-size: 13.5px;
-    font-weight: 700;
-    padding: 9px 18px;
-    border-radius: 999px;
-    text-decoration: none;
-    white-space: nowrap;
-  }
-
-  .nav-cta:hover { background: #000; }
-
-  .wrap {
-    max-width: 1080px;
-    margin: 0 auto;
-    padding: 28px 20px 44px;
-  }
-
-  .layout-grid {
-    display: grid;
-    grid-template-columns: 372px 1fr;
-    gap: 24px;
-    align-items: start;
-  }
-
-  .col-left { position: sticky; top: 18px; }
-
-  .hero-card {
-    position: relative;
-    border-radius: 20px;
-    overflow: hidden;
-    border: 3px solid var(--ink);
-    margin-bottom: 16px;
-  }
-
-  .hero-card img {
-    width: 100%;
-    height: 160px;
-    object-fit: cover;
-    display: block;
-  }
-
-  .hero-badge {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    background: var(--mustard);
-    color: var(--ink);
-    font-size: 11px;
-    font-weight: 800;
-    padding: 5px 12px;
-    border-radius: 999px;
-    border: 2px solid var(--ink);
-  }
-
-  .photo-credit {
-    font-size: 10px;
-    color: var(--text-muted);
-    text-align: right;
-    margin: -10px 0 16px;
-  }
-
-  .photo-credit a { color: var(--text-muted); }
-
-  header.hero-copy { margin-bottom: 14px; }
-
-  header.hero-copy h1 {
-    font-size: 26px;
-    margin: 0 0 8px;
-    line-height: 1.25;
-  }
-
-  header.hero-copy p {
-    color: var(--text-muted);
-    font-size: 13.5px;
-    margin: 0;
-  }
-
-  .picker-card {
-    background: var(--mustard-soft);
-    border: 3px solid var(--ink);
-    border-radius: 20px;
-    padding: 26px 22px;
-    text-align: center;
-  }
-
-  .result-tags {
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    min-height: 22px;
-  }
-
-  .tag {
-    font-size: 10.5px;
-    background: var(--lavender);
-    color: var(--ink);
-    padding: 3px 11px;
-    border-radius: 999px;
-    font-weight: 700;
-    border: 1.5px solid var(--ink);
-  }
-
-  .result-name {
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 21px;
-    color: var(--ink);
-    margin: 12px 0 6px;
-    min-height: 26px;
-  }
-
-  .result-desc {
-    color: var(--text-muted);
-    font-size: 13px;
-    min-height: 20px;
-    padding: 0 6px;
-  }
-
-  .result-body {
-    max-height: 0;
-    overflow: hidden;
-    opacity: 0;
-    transition: max-height 0.35s ease, opacity 0.3s ease;
-  }
-
-  .result-body.show { max-height: 900px; opacity: 1; margin-top: 16px; }
-
-  .result-ingredients, .result-steps {
-    text-align: left;
-    background: var(--surface);
-    border: 2px solid var(--ink);
-    border-radius: 14px;
-    padding: 14px 16px;
-    margin-bottom: 10px;
-  }
-
-  .ing-title {
-    font-size: 11px;
-    font-weight: 800;
-    color: var(--text-muted);
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-  }
-
-  .ing-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 7px 0;
-    border-bottom: 1px dashed #E7DFCE;
-    font-size: 12.5px;
-  }
-
-  .ing-row:last-child { border-bottom: none; }
-  .ing-name { color: var(--ink); font-weight: 600; }
-  .ing-amount { color: var(--text-muted); margin-left: auto; }
-
-  .ing-buy {
-    font-size: 11px;
-    font-weight: 800;
-    color: var(--ink);
-    background: var(--mustard);
-    padding: 4px 12px;
-    border-radius: 999px;
-    text-decoration: none;
-    white-space: nowrap;
-    border: 1.5px solid var(--ink);
-  }
-
-  .ing-buy:hover { background: var(--ink); color: var(--mustard); }
-
-  .step-item {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 9px;
-    font-size: 12.5px;
-    align-items: flex-start;
-  }
-
-  .step-item:last-child { margin-bottom: 0; }
-
-  .step-num {
-    flex-shrink: 0;
-    width: 19px;
-    height: 19px;
-    border-radius: 50%;
-    background: var(--ink);
-    color: var(--mustard);
-    font-size: 10.5px;
-    font-weight: 800;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-top: 1px;
-  }
-
-  .step-text { color: var(--ink); }
-
-  .youtube-link {
-    display: flex;
-    margin: 4px auto 0;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--ink);
-    text-decoration: underline;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-  }
-
-  .btn-pick {
-    margin-top: 18px;
-    padding: 13px 30px;
-    background: var(--ink);
-    color: var(--mustard);
-    border: 3px solid var(--ink);
-    border-radius: 999px;
-    font-size: 14.5px;
-    font-weight: 800;
-    cursor: pointer;
-    transition: transform 0.12s ease, background 0.15s ease;
-  }
-
-  .btn-pick:hover { background: #000; transform: translateY(-1px); }
-  .btn-pick:active { transform: translateY(0) scale(0.98); }
-
-  /* right column: tabs */
-  .tabs {
-    display: inline-flex;
-    background: var(--surface);
-    border: 2.5px solid var(--ink);
-    padding: 4px;
-    border-radius: 999px;
-    gap: 2px;
-    margin-bottom: 14px;
-  }
-
-  .tab-btn {
-    background: transparent;
-    border: none;
-    color: var(--ink);
-    font-size: 13px;
-    font-weight: 700;
-    padding: 8px 16px;
-    border-radius: 999px;
-    cursor: pointer;
-  }
-
-  .tab-btn.active { background: var(--mustard); }
-
-  .tab-panel {
-    display: none;
-    background: var(--surface);
-    border: 3px solid var(--ink);
-    border-radius: 20px;
-    padding: 24px 26px;
-    max-height: 560px;
-    overflow-y: auto;
-  }
-
-  .tab-panel.active { display: block; }
-  .tab-panel p { font-size: 13.5px; margin: 0 0 12px; }
-
-  ul.tip-list { margin: 0 0 14px; padding-left: 0; list-style: none; }
-
-  ul.tip-list li {
-    font-size: 13.5px;
-    margin-bottom: 10px;
-    padding-left: 20px;
-    position: relative;
-  }
-
-  ul.tip-list li::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 7px;
-    width: 8px; height: 8px;
-    background: var(--mustard);
-    border: 1.5px solid var(--ink);
-    border-radius: 2px;
-  }
-
-  .week-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .week-table th, .week-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #E7DFCE; }
-  .week-table th { font-weight: 800; width: 56px; }
-  .week-table tr:last-child td, .week-table tr:last-child th { border-bottom: none; }
-
-  .notice {
-    background: var(--warn-soft);
-    color: var(--warn);
-    border: 2px solid var(--warn);
-    border-radius: 14px;
-    padding: 14px 18px;
-    font-size: 12.5px;
-  }
-
-  .notice strong { display: block; margin-bottom: 4px; }
-  .notice.info-wide { margin: 18px 0 0; }
-
-  footer.pagefoot {
-    margin-top: 30px;
-    padding: 18px 0;
-    border-top: 3px solid var(--ink);
-    font-size: 12.5px;
-    color: var(--text-muted);
-    text-align: center;
-  }
-
-  footer.pagefoot a { color: var(--text-muted); }
-
-  @media (max-width: 860px) {
-    .layout-grid { grid-template-columns: 1fr; }
-    .col-left { position: static; }
-    .tab-panel { max-height: none; }
-    .nav-links { display: none; }
-  }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
 
 <nav class="topbar">
   <div class="nav-inner">
-    <a href="index.html" class="logo">✳ sloworld</a>
+    <a href="/index.html" class="logo">sloworld</a>
     <div class="nav-links">
-      <a href="index.html" class="active">저녁메뉴 추천</a>
-      <a href="lotto.html">로또 생성기</a>
-      <a href="economy/index.html">경제 상식</a>
-      <a href="inquiry.html">제휴 문의</a>
-      <a href="privacy.html">개인정보처리방침</a>
+      <div class="nav-item">
+        <button type="button">경제</button>
+        <div class="mega">
+          <div class="mega-cols">
+            <div>
+              <div class="mega-col-title">투자 기초</div>
+              <a class="mega-link" href="/economy/what-is-stock.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/></svg></span><span><strong>주식이란 무엇인가</strong><span>회사의 주인이 되는 방법</span></span></a>
+              <a class="mega-link" href="/economy/what-is-crypto.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9 12h6M12 9v6"/></svg></span><span><strong>암호화폐란 무엇인가</strong><span>코인의 기본 원리</span></span></a>
+              <a class="mega-link" href="/economy/what-is-etf.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/></svg></span><span><strong>ETF란 무엇인가</strong><span>초보자를 위한 가이드</span></span></a>
+              <a class="mega-link" href="/economy/diversification.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg></span><span><strong>분산투자가 필요한 이유</strong><span>달걀은 한 바구니에 담지 않기</span></span></a>
+            </div>
+            <div>
+              <div class="mega-col-title">생활 속 경제</div>
+              <a class="mega-link" href="/economy/inflation.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg></span><span><strong>인플레이션이란</strong><span>물가가 오른다는 것의 진짜 의미</span></span></a>
+              <a class="mega-link" href="/economy/interest-rate.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg></span><span><strong>금리와 우리 생활</strong><span>대출이자는 왜 같이 오를까</span></span></a>
+              <a class="mega-link" href="/economy/credit-score.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span><span><strong>신용점수 관리법</strong><span>대출 이자를 좌우하는 숫자</span></span></a>
+              <a class="mega-link" href="/economy/emergency-fund.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor" stroke="none"/></svg></span><span><strong>비상금은 얼마나</strong><span>급할 때 나를 지켜주는 돈</span></span></a>
+            </div>
+          </div>
+          <a class="mega-foot" href="/economy/index.html">경제 상식 전체 보기 →</a>
+        </div>
+      </div>
+
+      <div class="nav-item">
+        <button type="button">생활</button>
+        <div class="mega narrow">
+          <div class="mega-cols one-col">
+            <div>
+              <div class="mega-col-title">육아 · 가정생활</div>
+              <a class="mega-link" href="/life/menu.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg></span><span><strong>오늘 저녁 뭐 해줄까</strong><span>1~3세 유아식 저녁메뉴 추천기</span></span></a>
+              <a class="mega-link" href="/life/play.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M10 8l6 4-6 4V8z"/></svg></span><span><strong>오늘은 뭐 하고 놀까</strong><span>연령별 놀이활동 추천기</span></span></a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <a href="/etc/lotto.html">기타</a>
     </div>
-    <a href="inquiry.html" class="nav-cta">제휴 문의</a>
+    <a href="/inquiry.html" class="nav-cta">제휴 문의</a>
   </div>
 </nav>
 
-<div class="wrap">
-  <div class="layout-grid">
-    <div class="col-left">
-      <div class="hero-card">
-        <span class="hero-badge">1~3세 유아식</span>
-        <img src="images/hero-toddler-meal.jpg" alt="아이가 그릇에 담긴 건강한 유아식을 먹는 모습">
-      </div>
-      <div class="photo-credit">
-        Photo by <a href="https://unsplash.com/@derekowensheart" target="_blank" rel="noopener">Derek Owens</a> on <a href="https://unsplash.com" target="_blank" rel="noopener">Unsplash</a>
-      </div>
-
-      <header class="hero-copy">
-        <h1>오늘 저녁, 뭐 해줄까?</h1>
-        <p>버튼 하나로 오늘의 유아식 저녁 메뉴를 추천받아보세요.</p>
-      </header>
-
-      <div class="picker-card">
-        <div class="result-tags" id="result-tags"></div>
-        <div class="result-name" id="result-name">버튼을 눌러보세요</div>
-        <div class="result-desc" id="result-desc">오늘의 유아식 저녁 메뉴를 추천해드려요</div>
-
-        <div class="result-body" id="result-body">
-          <div class="result-ingredients">
-            <div class="ing-title">재료 · 1인분 (유아식 기준)</div>
-            <div id="ing-rows"></div>
-          </div>
-          <div class="result-steps">
-            <div class="ing-title">조리 순서</div>
-            <div id="step-rows"></div>
-          </div>
-          <a class="youtube-link" id="youtube-link" href="#" target="_blank" rel="noopener"></a>
-        </div>
-
-        <button class="btn-pick" onclick="pickMenu()">오늘의 메뉴 추천받기</button>
-      </div>
+<section class="section">
+  <div class="section-inner">
+    <span class="eyebrow">SLOWORLD</span>
+    <h1 style="font-size: clamp(34px, 5vw, 52px); max-width: 16ch;">느리게, 그러나 꾸준히 쌓아가는 관심사들</h1>
+    <p style="font-size: 16px; color: var(--text-muted); max-width: 52ch; margin: 20px 0 28px;">경제 상식부터 육아·생활 도구, 소소한 재미까지 — 한 사람이 관심 있는 걸 하나씩 정리해 나가는 공간이에요. 카테고리는 계속 늘어날 예정입니다.</p>
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+      <a href="/economy/index.html" class="pill-btn accent">경제 상식 둘러보기</a>
+      <a href="/life/menu.html" class="pill-btn outline">생활 도구 써보기</a>
     </div>
 
-    <div class="col-right">
-      <div class="tabs">
-        <button class="tab-btn active" data-tab="guide" onclick="switchTab('guide')">식단 가이드</button>
-        <button class="tab-btn" data-tab="week" onclick="switchTab('week')">주간 식단표</button>
-        <button class="tab-btn" data-tab="faq" onclick="switchTab('faq')">FAQ</button>
+    <div class="stat-grid">
+      <div>
+        <div class="stat-label">카테고리</div>
+        <div class="stat-value">3</div>
       </div>
-
-      <div class="tab-panel active" id="tab-guide">
-        <p>돌이 지나 유아식으로 넘어가는 시기에는 어른 반찬과 비슷하게 먹일 수 있지만, 간과 크기, 재료 선택에는 여전히 신경 써야 해요.</p>
-        <ul class="tip-list">
-          <li><strong>간은 최소로</strong> — 소금, 간장, 설탕은 어른 기준의 1/3 이하로 줄이고, 국물 요리는 건더기 위주로 먹이는 게 좋아요.</li>
-          <li><strong>한입 크기로</strong> — 아이 새끼손가락 한 마디 정도 크기로 잘라주면 씹기와 삼키기에 안전해요.</li>
-          <li><strong>질감 다양화</strong> — 너무 무른 음식만 계속 주면 씹는 연습이 늦어질 수 있어요.</li>
-          <li><strong>단백질 + 채소 + 탄수화물</strong> — 한 끼에 세 가지 군을 골고루 담아주면 영양 균형을 맞추기 쉬워요.</li>
-          <li><strong>새로운 재료는 낮에 먼저</strong> — 알레르기 반응을 관찰하기 쉽도록, 저녁보다 점심에 소량 먼저 시도해보세요.</li>
-        </ul>
-        <div class="notice">
-          <strong>⚠ 질식 위험 재료 주의</strong>
-          땅콩·견과류 통알, 포도·방울토마토 통째, 팝콘, 곤약젤리, 딱딱한 사탕류는 3세 이전에는 피하거나 잘게 다져서 주세요. 꿀은 돌 이전 아이에게는 절대 먹이지 마세요.
-        </div>
+      <div>
+        <div class="stat-label">경제 상식 글</div>
+        <div class="stat-value">15</div>
       </div>
-
-      <div class="tab-panel" id="tab-week">
-        <table class="week-table">
-          <tr><th>월</th><td>소고기 야채죽 + 두부 계란찜</td></tr>
-          <tr><th>화</th><td>안심 함박스테이크 + 브로콜리 크림수프</td></tr>
-          <tr><th>수</th><td>닭가슴살 야채볶음 + 감자 치즈전</td></tr>
-          <tr><th>목</th><td>미역국 + 부드러운 계란말이</td></tr>
-          <tr><th>금</th><td>흰살생선 크림소스 + 단호박 치즈찜</td></tr>
-          <tr><th>토</th><td>소고기무국 + 밥새우볶음</td></tr>
-          <tr><th>일</th><td>두부 새우완자탕 + 자색고구마 매쉬</td></tr>
-        </table>
+      <div>
+        <div class="stat-label">생활 추천 도구</div>
+        <div class="stat-value">2</div>
       </div>
-
-      <div class="tab-panel" id="tab-faq">
-        <p><strong>Q. 매번 새로 만들어야 하나요?</strong><br>
-        아니에요. 국·찌개류는 2~3인분씩 만들어 소분 냉동해두면 저녁마다 데우기만 하면 돼서 훨씬 수월해요.</p>
-        <p><strong>Q. 아이가 특정 메뉴를 거부하면 어떻게 하나요?</strong><br>
-        같은 재료를 조리법만 바꿔서 다시 시도해보세요. 볶은 채소를 거부하면 전이나 죽 형태로 바꿔서 주면 받아들이는 경우가 많아요.</p>
-      </div>
-
-      <div class="notice info-wide">
-        <strong>ℹ 안내</strong>
-        이 페이지의 정보는 일반적인 육아 정보 제공을 목적으로 하며, 전문적인 영양 상담이나 의료 조언을 대체하지 않습니다. 알레르기, 발달 상태 등 개별 아이의 상황은 소아청소년과 전문의 또는 영양사와 상담하시길 권장합니다.
+      <div>
+        <div class="stat-label">기타 도구</div>
+        <div class="stat-value">1</div>
       </div>
     </div>
   </div>
+</section>
 
-  <footer class="pagefoot">
-    sloworld · <a href="lotto.html">로또 번호 생성기</a> · <a href="inquiry.html">제휴 및 비즈니스 문의</a> · <a href="privacy.html">개인정보처리방침</a>
-  </footer>
-</div>
+<hr class="hairline">
 
-<script>
-  const menus = [
-    { name: "소고기 야채죽", desc: "다진 소고기와 당근, 애호박을 잘게 썰어 끓인 부드러운 죽. 소화가 편해 저녁 메뉴로 무난해요.", tags: ["단백질", "부드러움"],
-      steps: ["다진 소고기를 찬물에 담가 핏물을 뺀다.", "당근, 애호박을 아주 잘게 다진다.", "냄비에 참기름을 살짝 두르고 소고기를 볶다가 물을 붓는다.", "불린 쌀과 채소를 넣고 약불에서 쌀알이 퍼질 때까지 저어가며 끓인다."],
-      ingredients: [["다진 소고기", "20g"], ["당근", "10g"], ["애호박", "10g"], ["불린 쌀", "1/3공기"], ["물", "1컵(250ml)"], ["참기름", "약간"]] },
-    { name: "두부 계란찜", desc: "으깬 두부와 계란을 섞어 찐 요리. 간을 거의 하지 않아도 고소해서 아이들이 잘 먹어요.", tags: ["단백질", "저염"],
-      steps: ["두부를 으깨어 물기를 가볍게 짜낸다.", "계란을 풀어 두부와 섞고 육수나 물을 약간 더한다.", "체에 한 번 걸러 알끝을 없앤다.", "찜기에서 15분 정도 약불로 부드럽게 익힌다."],
-      ingredients: [["두부", "30g"], ["계란", "1개"], ["육수 또는 물", "3큰술"]] },
-    { name: "안심 함박스테이크", desc: "다진 소고기와 두부를 섞어 동그랗게 구운 미니 함박. 손으로 집어먹기도 좋아요.", tags: ["단백질", "핑거푸드"],
-      steps: ["다진 소고기와 으깬 두부를 2:1 비율로 섞는다.", "양파를 다져 넣고 치댄다.", "한입 크기로 동글납작하게 빚는다.", "약불 팬에 기름을 살짝 두르고 속까지 익도록 굽는다."],
-      ingredients: [["다진 소고기", "30g"], ["두부", "15g"], ["다진 양파", "1큰술"], ["식용유", "약간"]] },
-    { name: "애호박 새우전", desc: "채썬 애호박과 다진 새우를 부친 전. 씹는 연습에 좋은 질감이에요.", tags: ["채소", "씹는연습"],
-      steps: ["애호박을 가늘게 채썬다.", "새우는 껍질과 내장을 제거하고 잘게 다진다.", "부침가루와 계란물에 애호박, 새우를 섞는다.", "약불 팬에서 앞뒤로 노릇하게 부친다."],
-      ingredients: [["애호박", "1/6개"], ["새우살", "20g"], ["부침가루", "2큰술"], ["계란", "1/2개"]] },
-    { name: "브로콜리 크림수프", desc: "브로콜리와 감자를 삶아 곱게 갈아낸 수프. 편식 채소를 자연스럽게 먹일 수 있어요.", tags: ["채소", "부드러움"],
-      steps: ["브로콜리와 감자를 부드럽게 삶는다.", "우유와 함께 블렌더로 곱게 간다.", "냄비에 옮겨 약불로 데우며 농도를 맞춘다.", "따뜻할 때 그릇에 담아 준다."],
-      ingredients: [["브로콜리", "20g"], ["감자", "1/4개"], ["우유", "1/2컵(125ml)"]] },
-    { name: "닭가슴살 야채볶음", desc: "잘게 썬 닭가슴살과 파프리카, 양파를 약하게 간해 볶은 메뉴.", tags: ["단백질", "채소"],
-      steps: ["닭가슴살을 잘게 채썰거나 다진다.", "파프리카, 양파도 작게 썬다.", "팬에 기름을 두르고 닭가슴살을 먼저 볶는다.", "채소를 더해 함께 볶고 아주 약하게 간한다."],
-      ingredients: [["닭가슴살", "30g"], ["파프리카", "10g"], ["양파", "10g"], ["식용유", "약간"]] },
-    { name: "감자 치즈전", desc: "으깬 감자에 치즈를 소량 섞어 부친 전. 짭짤한 맛을 좋아하는 아이에게 추천해요.", tags: ["탄수화물", "핑거푸드"],
-      steps: ["감자를 삶아 곱게 으깬다.", "치즈를 잘게 잘라 섞는다.", "동글납작하게 모양을 잡는다.", "약불 팬에서 겉면이 노릇해질 때까지 굽는다."],
-      ingredients: [["감자", "1/2개"], ["아기치즈", "1/2장"], ["식용유", "약간"]] },
-    { name: "부드러운 계란말이", desc: "당근, 시금치를 잘게 다져 넣은 계란말이. 한입 크기로 잘라주면 좋아요.", tags: ["단백질", "채소"],
-      steps: ["당근과 시금치를 아주 잘게 다진다.", "계란을 풀어 채소와 섞는다.", "약불 팬에 얇게 부으며 여러 겹으로 말아준다.", "한 김 식힌 뒤 한입 크기로 자른다."],
-      ingredients: [["계란", "1개"], ["당근", "5g"], ["시금치", "5g"]] },
-    { name: "단호박 치즈찜", desc: "단호박을 쪄서 치즈를 살짝 올린 메뉴. 자연스러운 단맛이 있어 거부감이 적어요.", tags: ["채소", "부드러움"],
-      steps: ["단호박을 씨를 빼고 적당한 크기로 썬다.", "찜기에 부드러워질 때까지 찐다.", "따뜻할 때 치즈를 살짝 올려 녹인다.", "포크로 살짝 으깨 먹기 편하게 만든다."],
-      ingredients: [["단호박", "50g"], ["아기치즈", "1/2장"]] },
-    { name: "미역국", desc: "소고기와 미역을 넣고 약하게 간한 국. 건더기 위주로 떠먹이면 좋아요.", tags: ["국물", "저염"],
-      steps: ["마른 미역을 불려 잘게 자른다.", "다진 소고기를 참기름에 볶는다.", "미역을 더해 함께 볶다가 물을 붓는다.", "20분 이상 약불로 끓여 부드럽게 우려낸다."],
-      ingredients: [["마른 미역", "3g"], ["다진 소고기", "15g"], ["참기름", "약간"], ["물", "1컵(250ml)"]] },
-    { name: "순한맛 야채볶음밥", desc: "당근, 양파, 계란을 넣고 간장 없이 볶은 순한 볶음밥.", tags: ["탄수화물", "채소"],
-      steps: ["당근, 양파를 잘게 다진다.", "팬에 기름을 두르고 계란을 스크램블한다.", "채소와 밥을 더해 함께 볶는다.", "소금 대신 채수나 참기름으로 향만 살짝 더한다."],
-      ingredients: [["진밥", "1/2공기"], ["당근", "10g"], ["양파", "10g"], ["계란", "1/2개"]] },
-    { name: "연두부 스크램블", desc: "연두부와 계란을 부드럽게 스크램블한 메뉴. 이가 적은 아이도 먹기 편해요.", tags: ["단백질", "부드러움"],
-      steps: ["연두부를 숟가락으로 뭉갠다.", "계란을 풀어 연두부와 섞는다.", "약불 팬에서 젓가락으로 저어가며 익힌다.", "덩어리가 크지 않도록 잘게 부수며 마무리한다."],
-      ingredients: [["연두부", "50g"], ["계란", "1개"]] },
-    { name: "흰살생선 크림소스", desc: "가시 없는 흰살생선을 구워 우유 베이스 크림소스를 곁들인 메뉴.", tags: ["단백질", "부드러움"],
-      steps: ["흰살생선의 가시를 꼼꼼히 제거한다.", "약불 팬에 앞뒤로 부드럽게 굽는다.", "우유와 약간의 밀가루로 걸쭉한 소스를 만든다.", "구운 생선 위에 소스를 끼얹는다."],
-      ingredients: [["흰살생선살", "30g"], ["우유", "3큰술"], ["밀가루", "1작은술"]] },
-    { name: "소고기무국", desc: "소고기와 무를 넣어 깊게 우린 국. 밥새우볶음과 곁들이면 균형 잡힌 저녁이 돼요.", tags: ["국물", "저염"],
-      steps: ["무를 나박하게 썬다.", "소고기를 참기름에 볶는다.", "무를 더해 볶다가 물을 붓는다.", "무가 투명해질 때까지 약불로 끓인다."],
-      ingredients: [["소고기", "15g"], ["무", "30g"], ["참기름", "약간"], ["물", "1컵(250ml)"]] },
-    { name: "파프리카 잡채", desc: "당면 대신 채소 비중을 높인 순한 잡채. 색이 알록달록해 흥미를 끌어요.", tags: ["채소", "탄수화물"],
-      steps: ["당면을 삶아 짧게 자른다.", "파프리카, 당근을 가늘게 채썬다.", "각 재료를 팬에 따로 살짝 볶는다.", "모두 섞어 참기름으로 가볍게 무친다."],
-      ingredients: [["당면", "15g"], ["파프리카", "10g"], ["당근", "10g"], ["참기름", "약간"]] },
-    { name: "자색고구마 매쉬", desc: "삶아서 곱게 으깬 자색고구마. 부드러운 반찬이 필요할 때 좋아요.", tags: ["채소", "부드러움"],
-      steps: ["자색고구마를 껍질째 삶는다.", "익으면 껍질을 벗기고 곱게 으깬다.", "우유를 약간 더해 부드러운 농도로 만든다.", "한 김 식혀서 낸다."],
-      ingredients: [["자색고구마", "1/2개"], ["우유", "2큰술"]] },
-    { name: "닭안심 완자탕", desc: "다진 닭안심을 완자로 빚어 맑은 국물에 끓인 메뉴.", tags: ["단백질", "국물"],
-      steps: ["닭안심을 곱게 다진다.", "다진 채소를 소량 섞어 완자 모양으로 빚는다.", "맑은 육수를 끓인다.", "완자를 넣고 속까지 익을 때까지 끓인다."],
-      ingredients: [["닭안심", "30g"], ["다진 채소", "1큰술"], ["육수", "1컵(250ml)"]] },
-    { name: "두부 새우완자", desc: "두부와 다진 새우를 섞어 동글게 빚어 찐 완자. 핑거푸드로도 좋아요.", tags: ["단백질", "핑거푸드"],
-      steps: ["두부의 물기를 짜내고 새우를 다진다.", "두 재료를 섞어 동글게 빚는다.", "찜기에서 완자 속까지 익도록 찐다.", "한 김 식혀 손으로 집어먹기 좋게 낸다."],
-      ingredients: [["두부", "20g"], ["새우살", "15g"]] },
-    { name: "사과 계피 오트밀", desc: "삶은 사과와 오트밀을 부드럽게 조리한 메뉴. 가벼운 저녁이 필요할 때 추천해요.", tags: ["탄수화물", "부드러움"],
-      steps: ["사과를 잘게 다져 부드럽게 익힌다.", "오트밀에 우유나 물을 붓고 불린다.", "약불에서 오트밀이 부드러워질 때까지 끓인다.", "익힌 사과를 섞고 계피가루를 아주 소량 뿌린다."],
-      ingredients: [["사과", "1/4개"], ["오트밀", "3큰술"], ["우유 또는 물", "1/2컵(125ml)"], ["계피가루", "아주 소량"]] },
-    { name: "시금치 나물무침 + 흰살생선구이", desc: "살짝 데친 시금치 나물과 부드럽게 구운 흰살생선을 함께 담은 한 끼.", tags: ["채소", "단백질"],
-      steps: ["시금치를 끓는 물에 짧게 데친다.", "찬물에 헹궈 물기를 꼭 짜고 잘게 썬다.", "참기름과 아주 소량의 소금으로 무친다.", "흰살생선은 가시를 제거하고 약불로 부드럽게 굽는다."],
-      ingredients: [["시금치", "20g"], ["참기름", "약간"], ["흰살생선살", "30g"]] }
-  ];
+<section class="section soft">
+  <div class="section-inner">
+    <span class="eyebrow">카테고리</span>
+    <h2 style="font-size: 28px;">지금 정리된 세 갈래</h2>
+    <div class="cat-grid">
+      <a href="/economy/index.html" class="cat-card">
+        <span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/></svg></span>
+        <h3>경제</h3>
+        <p>투자 추천이나 시황이 아니라, 평생 쓰는 경제·금융 기초 개념 15편.</p>
+        <ul class="cat-links">
+          <li>인플레이션이란 무엇인가</li>
+          <li>복리의 마법</li>
+          <li>주식이란 무엇인가 외 13편</li>
+        </ul>
+      </a>
+      <a href="/life/index.html" class="cat-card">
+        <span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg></span>
+        <h3>생활</h3>
+        <p>매일 반복되는 육아 고민을 덜어주는 랜덤 추천기들.</p>
+        <ul class="cat-links">
+          <li>저녁메뉴 추천기</li>
+          <li>연령별 놀이활동 추천기</li>
+        </ul>
+      </a>
+      <a href="/etc/lotto.html" class="cat-card">
+        <span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor" stroke="none"/></svg></span>
+        <h3>기타</h3>
+        <p>분류하기 애매하지만 재미있는 것들.</p>
+        <ul class="cat-links">
+          <li>로또 번호 생성기</li>
+        </ul>
+      </a>
+    </div>
+  </div>
+</section>
 
-  function pickMenu() {
-    const menu = menus[Math.floor(Math.random() * menus.length)];
-    document.getElementById('result-name').innerText = menu.name;
-    document.getElementById('result-desc').innerText = menu.desc;
-    document.getElementById('result-tags').innerHTML = menu.tags.map(t => `<span class="tag">${t}</span>`).join('');
+<footer class="pagefoot">
+  <span>sloworld</span>
+  <span><a href="/economy/index.html">경제</a> · <a href="/life/index.html">생활</a> · <a href="/etc/lotto.html">기타</a> · <a href="/inquiry.html">제휴 문의</a> · <a href="/privacy.html">개인정보처리방침</a></span>
+</footer>
 
-    document.getElementById('ing-rows').innerHTML = menu.ingredients.map(([name, amount]) => {
-      const query = encodeURIComponent(name);
-      return `<div class="ing-row">
-        <span class="ing-name">${name}</span>
-        <span class="ing-amount">${amount}</span>
-        <a class="ing-buy" href="https://www.kurly.com/search?sword=${query}" target="_blank" rel="noopener">구매</a>
-      </div>`;
-    }).join('');
-
-    document.getElementById('step-rows').innerHTML = menu.steps.map((s, i) => `
-      <div class="step-item">
-        <span class="step-num">${i + 1}</span>
-        <span class="step-text">${s}</span>
-      </div>
-    `).join('');
-
-    const ytLink = document.getElementById('youtube-link');
-    const query = encodeURIComponent(menu.name + ' 유아식 레시피');
-    ytLink.href = 'https://www.youtube.com/results?search_query=' + query;
-    ytLink.innerText = '▶ 유튜브에서 "' + menu.name + '" 영상 보기';
-
-    document.getElementById('result-body').classList.add('show');
-  }
-
-  function switchTab(name) {
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === name));
-    document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'tab-' + name));
-  }
-</script>
-
+<script src="/assets/nav.js" defer></script>
 </body>
 </html>

@@ -3,99 +3,45 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>sloworld · 개인정보처리방침</title>
+<title>개인정보처리방침 · sloworld</title>
 <meta name="google-adsense-account" content="ca-pub-2127159739328027">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2127159739328027" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
 <style>
-  :root {
-    --mustard: #EFC761;
-    --ink: #17140F;
-    --paper: #FFFDF8;
-    --surface: #FFFFFF;
-    --text-muted: #6B6255;
-  }
-
-  * { box-sizing: border-box; }
-
-  body {
-    margin: 0;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: 'Inter', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
-    line-height: 1.7;
-  }
-
-  h1 { font-family: 'Archivo Black', sans-serif; font-weight: 400; }
-
-  .topbar { background: var(--mustard); border-bottom: 3px solid var(--ink); }
-
-  .nav-inner {
-    max-width: 1120px; margin: 0 auto; padding: 14px 20px;
-    display: flex; align-items: center; gap: 24px;
-  }
-
-  .logo { font-family: 'Archivo Black', sans-serif; font-size: 18px; color: var(--ink); text-decoration: none; flex-shrink: 0; }
-  .nav-links { display: flex; gap: 20px; flex: 1; font-size: 14px; font-weight: 600; }
-  .nav-links a { color: var(--ink); text-decoration: none; opacity: 0.75; }
-  .nav-links a:hover, .nav-links a.active { opacity: 1; text-decoration: underline; }
-  .nav-cta {
-    background: var(--ink); color: var(--mustard); font-size: 13.5px; font-weight: 700;
-    padding: 9px 18px; border-radius: 999px; text-decoration: none; white-space: nowrap;
-  }
-  .nav-cta:hover { background: #000; }
-
-  .wrap { max-width: 700px; margin: 0 auto; padding: 40px 20px 80px; }
-
-  h1 { font-size: 24px; margin: 0 0 6px; }
-
+  .legal-wrap { max-width: 700px; margin: 0 auto; padding: 48px 24px 72px; }
   .updated { color: var(--text-muted); font-size: 13px; margin-bottom: 30px; }
-
-  section {
-    background: var(--surface);
-    border: 2.5px solid var(--ink);
-    border-radius: 16px;
-    padding: 24px 26px;
-    margin-bottom: 18px;
+  .legal-wrap section {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px 26px; margin-bottom: 16px;
   }
-
-  section h2 { font-size: 16.5px; margin: 0 0 10px; font-family: 'Inter', sans-serif; font-weight: 800; }
-  section p, section li { font-size: 14px; color: var(--ink); }
-
-  ul { margin: 0; padding-left: 20px; }
-  li { margin-bottom: 6px; }
-
-  a { color: var(--ink); font-weight: 700; }
-
-  footer.pagefoot {
-    margin-top: 30px; text-align: center; font-size: 12.5px; color: var(--text-muted);
-  }
-  footer.pagefoot a { color: var(--text-muted); font-weight: 400; }
-
-  @media (max-width: 860px) { .nav-links { display: none; } }
+  .legal-wrap section h2 { font-size: 16.5px; margin: 0 0 10px; }
+  .legal-wrap section p, .legal-wrap section li { font-size: 14px; }
+  .legal-wrap ul { margin: 0; padding-left: 20px; }
+  .legal-wrap li { margin-bottom: 6px; }
+  .legal-wrap a { color: var(--accent); font-weight: 600; }
 </style>
 </head>
 <body>
 
 <nav class="topbar">
   <div class="nav-inner">
-    <a href="index.html" class="logo">✳ sloworld</a>
+    <a href="/index.html" class="logo">sloworld</a>
     <div class="nav-links">
-      <a href="index.html">저녁메뉴 추천</a>
-      <a href="lotto.html">로또 생성기</a>
-      <a href="economy/index.html">경제 상식</a>
-      <a href="inquiry.html">제휴 문의</a>
-      <a href="privacy.html" class="active">개인정보처리방침</a>
+      <a href="/economy/index.html">경제</a>
+      <a href="/life/index.html">생활</a>
+      <a href="/etc/lotto.html">기타</a>
     </div>
-    <a href="inquiry.html" class="nav-cta">제휴 문의</a>
+    <a href="/inquiry.html" class="nav-cta">제휴 문의</a>
   </div>
 </nav>
 
-<div class="wrap">
-  <h1>개인정보처리방침</h1>
-  <div class="updated">최종 수정일: 2026년 8월 18일</div>
+<div class="legal-wrap">
+  <span class="eyebrow">법적 고지</span>
+  <h1 style="font-size: 26px; margin-bottom: 6px;">개인정보처리방침</h1>
+  <div class="updated">최종 수정일: 2026년 8월 19일</div>
 
   <section>
     <h2>1. 수집하는 개인정보 항목</h2>
@@ -140,11 +86,16 @@
 
   <section>
     <h2>7. 문의처</h2>
-    <p>개인정보 관련 문의사항은 <a href="inquiry.html">제휴 및 비즈니스 문의</a> 페이지를 통해 남겨주시기 바랍니다.</p>
+    <p>개인정보 관련 문의사항은 <a href="/inquiry.html">제휴 및 비즈니스 문의</a> 페이지를 통해 남겨주시기 바랍니다.</p>
   </section>
 
-  <footer class="pagefoot">본 방침은 사이트 운영 방식 변경에 따라 사전 고지 없이 수정될 수 있습니다.</footer>
+  <p style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 20px;">본 방침은 사이트 운영 방식 변경에 따라 사전 고지 없이 수정될 수 있습니다.</p>
 </div>
+
+<footer class="pagefoot">
+  <span>sloworld</span>
+  <span><a href="/economy/index.html">경제</a> · <a href="/life/index.html">생활</a> · <a href="/etc/lotto.html">기타</a> · <a href="/inquiry.html">제휴 문의</a> · <a href="/privacy.html">개인정보처리방침</a></span>
+</footer>
 
 </body>
 </html>

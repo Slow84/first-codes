@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>로또 번호 생성기 · sloworld 기타</title>
+<meta name="description" content="연금복권 스타일의 로또 번호 생성기. 재미로 즐기는 번호 추첨 시뮬레이션입니다.">
+<meta name="google-adsense-account" content="ca-pub-2127159739328027">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2127159739328027" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+  .ticket-container {
+    background: var(--bg);
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 32px 26px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+  }
+  .ticket-header { border-bottom: 1px solid var(--border); margin-bottom: 20px; padding-bottom: 14px; position: relative; }
+  .ticket-header .serial { font-size: 11px; color: var(--text-muted); position: absolute; top: -22px; right: 0; }
+  .ticket-header h1 { font-size: 22px; }
+  .row-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 8px 4px; border-bottom: 1px dashed var(--bg-soft); }
+  .row-label { font-weight: 800; font-style: italic; color: var(--text-muted); width: 26px; }
+  .balls-wrapper { display: flex; gap: 8px; }
+  .ball {
+    width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 1rem; color: var(--ink); background: var(--bg); border: 2px solid var(--border);
+  }
+  .color-1 { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .color-2 { background: var(--bg-soft); }
+  .color-3 { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+  .color-4 { background: var(--good-soft); border-color: var(--good); color: var(--good); }
+  .color-5 { background: #F1F1EF; }
+  .ticket-footer { margin-top: 22px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 14px; }
+  .ticket-footer a { color: var(--text-muted); font-weight: 600; }
+  @media (max-width: 400px) { .ball { width: 30px; height: 30px; font-size: 0.85rem; } .balls-wrapper { gap: 5px; } }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="nav-inner">
+    <a href="/index.html" class="logo">sloworld</a>
+    <div class="nav-links">
+      <a href="/economy/index.html">경제</a>
+      <a href="/life/index.html">생활</a>
+      <a href="/etc/lotto.html">기타</a>
+    </div>
+    <a href="/inquiry.html" class="nav-cta">제휴 문의</a>
+  </div>
+</nav>
+
+<section class="section soft">
+  <div class="ticket-container">
+    <div class="ticket-header">
+      <span class="serial" id="serial-num">TR-20260819-0001</span>
+      <span class="eyebrow">기타 · LOTTO 6/45</span>
+      <h1>로또 번호 생성기</h1>
+    </div>
+
+    <div id="lotto-paper"></div>
+
+    <div class="ticket-footer">
+      * 본 권은 실제 복권이 아니며, 책임감 있는 이용을 위한 재미용 시뮬레이션입니다.<br>
+      * 추첨일시: <span id="current-time"></span><br>
+      * <a href="/life/index.html">생활 카테고리 보기</a> · <a href="/inquiry.html">제휴 및 비즈니스 문의</a>
+    </div>
+
+    <button class="pill-btn" style="width: 100%; margin-top: 18px; justify-content: center;" onclick="drawAllRows()">PURCHASE / DRAW</button>
+  </div>
+</section>
+
+<footer class="pagefoot">
+  <span>sloworld</span>
+  <span><a href="/economy/index.html">경제</a> · <a href="/life/index.html">생활</a> · <a href="/etc/lotto.html">기타</a> · <a href="/inquiry.html">제휴 문의</a> · <a href="/privacy.html">개인정보처리방침</a></span>
+</footer>
+
+<script>
+  function getBallColorClass(num) {
+    if (num <= 10) return 'color-1';
+    if (num <= 20) return 'color-2';
+    if (num <= 30) return 'color-3';
+    if (num <= 40) return 'color-4';
+    return 'color-5';
+  }
+  function generateLottoNumbers() {
+    const numbers = [];
+    while (numbers.length < 6) {
+      const num = Math.floor(Math.random() * 45) + 1;
+      if (!numbers.includes(num)) numbers.push(num);
+    }
+    return numbers.sort((a, b) => a - b);
+  }
+  function updateTimeAndSerial() {
+    const now = new Date();
+    document.getElementById('current-time').innerText = now.toLocaleString();
+    const randomSerial = 'TR-' + now.getFullYear() +
+      String(now.getMonth() + 1).padStart(2, '0') +
+      String(now.getDate()).padStart(2, '0') + '-' +
+      Math.floor(Math.random() * 9000 + 1000);
+    document.getElementById('serial-num').innerText = randomSerial;
+  }
+  function drawAllRows() {
+    const paper = document.getElementById('lotto-paper');
+    paper.innerHTML = '';
+    const alphabet = ['A', 'B', 'C', 'D', 'E'];
+    for (let i = 0; i < 5; i++) {
+      const rowDiv = document.createElement('div');
+      rowDiv.className = 'row-container';
+      const label = document.createElement('span');
+      label.className = 'row-label';
+      label.innerText = alphabet[i];
+      rowDiv.appendChild(label);
+      const ballsWrapper = document.createElement('div');
+      ballsWrapper.className = 'balls-wrapper';
+      generateLottoNumbers().forEach(num => {
+        const ball = document.createElement('div');
+        ball.className = `ball ${getBallColorClass(num)}`;
+        ball.innerText = num;
+        ballsWrapper.appendChild(ball);
+      });
+      rowDiv.appendChild(ballsWrapper);
+      paper.appendChild(rowDiv);
+    }
+    updateTimeAndSerial();
+  }
+  drawAllRows();
+</script>
+<script src="/assets/nav.js" defer></script>
+
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>오늘은 뭐 하고 놀까 · sloworld 생활</title>
+<meta name="description" content="0세부터 7세까지, 연령별로 아이 발달에 도움이 되는 놀이활동을 추천해주는 도구와 안전 가이드를 제공합니다.">
+<meta name="google-adsense-account" content="ca-pub-2127159739328027">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2127159739328027" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="nav-inner">
+    <a href="/index.html" class="logo">sloworld</a>
+    <div class="nav-links">
+      <a href="/economy/index.html">경제</a>
+      <a href="/life/index.html">생활</a>
+      <a href="/etc/lotto.html">기타</a>
+    </div>
+    <a href="/inquiry.html" class="nav-cta">제휴 문의</a>
+  </div>
+</nav>
+
+<section class="section">
+  <div class="section-inner" style="text-align: center;">
+    <span class="eyebrow">생활 · 0~7세 놀이활동</span>
+    <h1 style="font-size: 34px;">오늘은 뭐 하고 놀까?</h1>
+    <p style="font-size: 15px; color: var(--text-muted); margin: 14px 0 0;">연령대를 고르고 버튼을 누르면, 발달에 도움이 되는 놀이활동을 추천해드려요.</p>
+  </div>
+</section>
+
+<section class="section soft" style="padding-top: 0;">
+  <div class="picker-wrap">
+    <div class="age-picker" id="age-picker" style="margin-bottom: 16px;"></div>
+    <div class="tool-card">
+      <div class="result-tags" id="result-tags"></div>
+      <div class="picker-result">
+        <div class="result-name" id="result-name">연령대를 먼저 골라주세요</div>
+        <div class="result-desc" id="result-desc"></div>
+
+        <div class="result-body" id="result-body">
+          <div class="detail-box">
+            <div class="detail-title">준비물</div>
+            <p id="result-materials"></p>
+          </div>
+          <div class="detail-box">
+            <div class="detail-title">발달 포인트</div>
+            <p id="result-benefit"></p>
+          </div>
+        </div>
+
+        <button class="pill-btn accent" style="margin-top: 20px;" onclick="pickActivity()">오늘의 놀이 추천받기</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-inner">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="dev" onclick="switchTab('dev')">발달 포인트</button>
+      <button class="tab-btn" data-tab="safety" onclick="switchTab('safety')">안전 수칙</button>
+      <button class="tab-btn" data-tab="faq" onclick="switchTab('faq')">FAQ</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-dev" style="max-width: 720px;">
+      <p style="font-size: 14.5px; color: var(--text-muted); margin-bottom: 16px;">연령대별로 아이가 관심을 보이는 놀이의 종류와 얻을 수 있는 발달 효과가 달라요. 참고해서 놀이를 골라보세요.</p>
+      <ul style="font-size: 14.5px; padding-left: 20px; margin: 0 0 20px;">
+        <li style="margin-bottom: 10px;"><strong>0~12개월</strong> — 오감 자극과 애착 형성이 중심이에요. 소리, 촉감, 표정을 활용한 놀이가 좋아요.</li>
+        <li style="margin-bottom: 10px;"><strong>1~2세</strong> — 대근육과 소근육이 급격히 발달하는 시기예요. 몸을 움직이고 손으로 조작하는 놀이가 효과적이에요.</li>
+        <li style="margin-bottom: 10px;"><strong>3~4세</strong> — 상상력과 사회성이 자라는 시기예요. 역할놀이나 간단한 규칙이 있는 놀이를 좋아해요.</li>
+        <li style="margin-bottom: 10px;"><strong>5~7세</strong> — 논리적 사고와 표현력이 발달해요. 규칙이 있는 게임이나 탐구형 놀이에 흥미를 느껴요.</li>
+      </ul>
+      <div class="callout">
+        <strong>ℹ 참고</strong>
+        발달 속도는 아이마다 차이가 커요. 연령 구분은 참고용일 뿐이니, 아이가 흥미를 보이는 놀이 위주로 자유롭게 활용해주세요.
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-safety" style="max-width: 720px;">
+      <ul style="font-size: 14.5px; padding-left: 20px; margin: 0;">
+        <li style="margin-bottom: 10px;"><strong>작은 부품 주의</strong> — 3세 미만 아이에게는 삼킬 수 있는 크기(지름 3.5cm 이하)의 놀잇감을 주지 마세요.</li>
+        <li style="margin-bottom: 10px;"><strong>물놀이는 항상 곁에서</strong> — 대야나 욕조를 이용한 물놀이는 단 몇 초라도 아이 혼자 두지 마세요.</li>
+        <li style="margin-bottom: 10px;"><strong>미끄럼 방지</strong> — 실내 놀이 공간은 매트나 러그로 바닥을 정리해 낙상을 예방해주세요.</li>
+        <li style="margin-bottom: 10px;"><strong>야외 활동</strong> — 자전거, 킥보드 등은 헬멧과 보호대를 반드시 착용시켜주세요.</li>
+      </ul>
+    </div>
+
+    <div class="tab-panel" id="tab-faq" style="max-width: 720px;">
+      <p style="font-size: 14.5px; margin-bottom: 14px;"><strong>Q. 같은 놀이를 계속 하려고만 해요, 괜찮을까요?</strong><br>
+      네, 괜찮아요. 아이들은 반복을 통해 개념을 익히고 안정감을 느껴요. 다만 가끔 새로운 놀이를 슬쩍 곁들여보면 관심사를 넓히는 데 도움이 돼요.</p>
+      <p style="font-size: 14.5px;"><strong>Q. 형제자매 나이차가 클 때는 어떻게 하나요?</strong><br>
+      낮은 연령대 놀이를 기본으로 하되, 큰 아이에게는 "동생 도와주기" 역할을 주면 두 연령대 모두에게 의미 있는 놀이가 될 수 있어요.</p>
+    </div>
+
+    <div class="disclaimer" style="max-width: 720px;">
+      이 페이지의 정보는 일반적인 육아 정보 제공을 목적으로 하며, 전문적인 발달 상담을 대체하지 않습니다. 발달이 염려되는 경우 소아청소년과 전문의와 상담하시길 권장합니다.
+    </div>
+  </div>
+</section>
+
+<footer class="pagefoot">
+  <span>sloworld</span>
+  <span><a href="/economy/index.html">경제</a> · <a href="/life/index.html">생활</a> · <a href="/etc/lotto.html">기타</a> · <a href="/inquiry.html">제휴 문의</a> · <a href="/privacy.html">개인정보처리방침</a></span>
+</footer>
+
+<script>
+  const ageGroups = [
+    { id: 'infant', label: '0~12개월', tag: '영아기' },
+    { id: 'toddler', label: '1~2세', tag: '걸음마기' },
+    { id: 'preschool', label: '3~4세', tag: '유아기' },
+    { id: 'kinder', label: '5~7세', tag: '유치원기' }
+  ];
+
+  const activities = {
+    infant: [
+      { name: '까꿍 놀이', desc: '손이나 천으로 얼굴을 가렸다 보여주며 반응을 살피는 기본 놀이예요.', materials: '준비물 없음', benefit: '정서적 유대감 형성, "사라져도 다시 나타난다"는 사물 영속성 개념 발달' },
+      { name: '딸랑이 흔들기', desc: '소리 나는 딸랑이를 아이 손에 쥐여주고 함께 흔들어보세요.', materials: '딸랑이 또는 소리나는 장난감', benefit: '손 움켜쥐는 힘과 협응력, 청각 자극' },
+      { name: '텍스처 매트 배밀이', desc: '다양한 촉감의 매트 위에서 자유롭게 배밀이하도록 해주세요.', materials: '촉감 매트 또는 다른 질감의 천 여러 장', benefit: '대근육 발달, 촉각 자극' },
+      { name: '거울 보기 놀이', desc: '안전거울 앞에서 아이의 표정과 움직임을 함께 관찰해요.', materials: '유아용 안전거울', benefit: '자아 인식의 시작, 시각적 호기심 자극' },
+      { name: '소리나는 그림책', desc: '버튼을 누르면 소리가 나는 그림책을 함께 넘겨보세요.', materials: '사운드북', benefit: '청각과 시각을 함께 쓰는 자극, 언어 노출' }
+    ],
+    toddler: [
+      { name: '스티커 붙이기', desc: '큰 종이 위에 스티커를 마음대로 붙여보게 해주세요.', materials: '유아용 스티커, 도화지', benefit: '소근육 발달, 집중력' },
+      { name: '색깔 블록 쌓기', desc: '블록을 색깔별로 분류하거나 높이 쌓아보는 놀이예요.', materials: '유아용 블록', benefit: '손-눈 협응, 공간 지각력, 색깔 인지' },
+      { name: '비눗방울 잡기', desc: '비눗방울을 불어주고 아이가 손으로 터뜨리며 쫓아가게 해주세요.', materials: '유아용 비눗방울', benefit: '대근육 발달, 눈과 손의 협응력' },
+      { name: '그림책 함께 읽기', desc: '짧은 그림책을 함께 보며 그림을 손으로 짚어주세요.', materials: '그림책', benefit: '언어 발달, 어휘력 확장' },
+      { name: '안전한 물놀이', desc: '얕은 대야에 물을 받아 컵으로 옮겨 담는 놀이를 해보세요.', materials: '대야, 작은 컵 여러 개', benefit: '감각 자극, 소근육 조절력' }
+    ],
+    preschool: [
+      { name: '소꿉놀이', desc: '역할을 정해서 요리사, 손님 등을 연기해보는 놀이예요.', materials: '소꿉놀이 세트 또는 집에 있는 그릇', benefit: '사회성, 상상력, 언어 표현력' },
+      { name: '클레이 놀이', desc: '점토를 마음대로 주무르고 모양을 만들어보게 해주세요.', materials: '유아용 클레이', benefit: '소근육 발달, 창의력' },
+      { name: '보물찾기 게임', desc: '집 안 곳곳에 작은 물건을 숨기고 함께 찾아보세요.', materials: '작은 장난감 몇 개', benefit: '문제해결력, 관찰력' },
+      { name: '종이접기', desc: '쉬운 도형부터 시작해서 종이를 접어보는 놀이예요.', materials: '색종이', benefit: '소근육 발달, 집중력, 순서 이해' },
+      { name: '집 안 장애물 코스', desc: '쿠션, 의자 등으로 간단한 장애물을 만들어 통과해보세요.', materials: '쿠션, 의자 등 집에 있는 물건', benefit: '대근육 발달, 균형감각' }
+    ],
+    kinder: [
+      { name: '간단한 보드게임', desc: '규칙이 단순한 보드게임을 함께 해보세요.', materials: '유아용 보드게임', benefit: '규칙 이해, 순서 지키기, 사회성' },
+      { name: '그림일기 쓰기', desc: '오늘 있었던 일을 그림과 짧은 글로 표현해보게 해주세요.', materials: '노트, 색연필', benefit: '언어 표현력, 정서 표현' },
+      { name: '자전거·킥보드 타기', desc: '안전장비를 갖추고 야외에서 균형을 잡으며 타보세요.', materials: '자전거 또는 킥보드, 헬멧', benefit: '대근육 발달, 균형감각, 자신감' },
+      { name: '간단 과학 실험', desc: '식초와 베이킹소다를 섞어 거품이 나는 반응을 관찰해보세요.', materials: '식초, 베이킹소다, 투명 용기', benefit: '탐구심, 관찰력, 원인과 결과 이해' },
+      { name: '역할극 놀이', desc: '동화 속 등장인물이 되어 짧은 연극을 해보세요.', materials: '간단한 소품(선택)', benefit: '표현력, 자신감, 이야기 이해력' }
+    ]
+  };
+
+  let selectedAge = null;
+
+  function renderAgeButtons() {
+    const wrap = document.getElementById('age-picker');
+    wrap.innerHTML = ageGroups.map(g =>
+      `<button class="age-btn" id="age-${g.id}" onclick="selectAge('${g.id}')">${g.label}</button>`
+    ).join('');
+  }
+
+  function selectAge(id) {
+    selectedAge = id;
+    ageGroups.forEach(g => document.getElementById('age-' + g.id).classList.toggle('active', g.id === id));
+    document.getElementById('result-name').innerText = '버튼을 눌러보세요';
+    document.getElementById('result-desc').innerText = '';
+    document.getElementById('result-tags').innerHTML = '';
+    document.getElementById('result-body').classList.remove('show');
+  }
+
+  function pickActivity() {
+    if (!selectedAge) {
+      document.getElementById('result-name').innerText = '연령대를 먼저 골라주세요';
+      return;
+    }
+    const list = activities[selectedAge];
+    const item = list[Math.floor(Math.random() * list.length)];
+    const group = ageGroups.find(g => g.id === selectedAge);
+
+    document.getElementById('result-tags').innerHTML = `<span class="tag">${group.label}</span><span class="tag">${group.tag}</span>`;
+    document.getElementById('result-name').innerText = item.name;
+    document.getElementById('result-desc').innerText = item.desc;
+    document.getElementById('result-materials').innerText = item.materials;
+    document.getElementById('result-benefit').innerText = item.benefit;
+    document.getElementById('result-body').classList.add('show');
+  }
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === name));
+    document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'tab-' + name));
+  }
+
+  renderAgeButtons();
+</script>
+<script src="/assets/nav.js" defer></script>
+
+</body>
+</html>
