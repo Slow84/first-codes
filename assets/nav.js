@@ -101,6 +101,6 @@
   // this runs — call directly instead of waiting on DOMContentLoaded.
   setupMegaMenus();
   removeTopNavCta();
-  setupThemeToggles();
   setupMobileMenu();
+  setupThemeToggles();
 })();

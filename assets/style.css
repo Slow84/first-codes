@@ -141,14 +141,9 @@ a { color: inherit; }
 }
 
 .nav-cta {
-  background: var(--ink);
-  color: #fff;
-  font-size: 13.5px;
-  font-weight: 700;
-  padding: 10px 20px;
-  border-radius: 999px;
-  text-decoration: none;
-  white-space: nowrap;
+  /* removed from the top bar; markup is still present in each page until
+     nav.js strips it, so hide it immediately via CSS to avoid any flash */
+  display: none;
 }
 
 .nav-cta:hover { background: var(--accent); }
@@ -277,7 +272,7 @@ a { color: inherit; }
 @media (max-width: 860px) {
   .nav-links { display: none; }
   .mega { display: none !important; }
-  .hamburger-toggle { display: flex; }
+  .hamburger-toggle { display: flex; margin-left: auto; }
   .mobile-panel { display: flex; }
   .mobile-panel.open { max-height: 240px; padding: 8px 24px 16px; }
 }
