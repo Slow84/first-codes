@@ -4,9 +4,13 @@ const container = document.getElementById('hero-orb');
 if (container && window.WebGLRenderingContext) {
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x000000, 2, 14);
+  scene.fog = new THREE.Fog(0x000000, 3, 15);
 
-  const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 40);
+  // camera is completely fixed for the whole animation — the composition
+  // (where the vanishing point sits on screen) never changes
+  const camera = new THREE.PerspectiveCamera(76, 1, 0.05, 40);
+  camera.position.set(0, 0, 0);
+  camera.lookAt(0, 0, -1);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -20,72 +24,103 @@ if (container && window.WebGLRenderingContext) {
     camera.updateProjectionMatrix();
   }
 
-  // ---- a genuinely curved tunnel: left -> up through the upper-right -> back down,
-  // built by extruding a tube along a bent path (not a straight cone) ----
-  const curvePoints = [
-    new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(1.2, 1.6, -5),
-    new THREE.Vector3(2.6, 2.6, -10.5),
-    new THREE.Vector3(3.2, 1.2, -16),
-    new THREE.Vector3(3.0, -1.5, -21.5),
-    new THREE.Vector3(2.2, -3.6, -27),
-    new THREE.Vector3(1.6, -4.8, -32)
-  ];
-  const path = new THREE.CatmullRomCurve3(curvePoints);
-  path.curveType = 'catmullrom';
-  path.tension = 0.5;
+  // ---- static funnel silhouette, offset so the vanishing point sits in
+  // the lower-right of frame (matches the reference photo) ----
+  const funnelGroup = new THREE.Group();
+  funnelGroup.position.set(3.1, -2.0, 0);
+  scene.add(funnelGroup);
 
-  const TUBE_RADIUS = 2.3;
-  const tubeGeo = new THREE.TubeGeometry(path, 220, TUBE_RADIUS, 28, false);
-  const tubeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5, fog: true, side: THREE.BackSide });
-  const tube = new THREE.Mesh(tubeGeo, tubeMat);
-  scene.add(tube);
+  const RINGS = 56;
+  const SEGMENTS = 64;
+  const DEPTH = 20;
+  const R0 = 7.2;
+  const POWER = 2.5;
 
-  // ---- countless background stars, loosely following the tunnel's bend ----
-  const STAR_COUNT = 900;
+  function radiusAt(t) {
+    return Math.max(0.02, R0 * Math.pow(1 - t, POWER));
+  }
+
+  // build once at t=0..1, then each frame we re-derive (radius, y) per row
+  // from a phase-shifted t — the ring silhouette (radius as a function of
+  // y) never changes, only which physical ring sits at which depth, which
+  // is what makes the rings appear to crawl inward and loop endlessly
+  // while the overall static shape stays identical every frame.
+  const positions = new Float32Array((RINGS + 1) * (SEGMENTS + 1) * 3);
+  const rowT = new Float32Array(RINGS + 1);
+  const colAngle = new Float32Array(SEGMENTS + 1);
+  for (let j = 0; j <= RINGS; j++) rowT[j] = j / RINGS;
+  for (let i = 0; i <= SEGMENTS; i++) colAngle[i] = (i / SEGMENTS) * Math.PI * 2;
+
+  function writeFunnel(phase) {
+    let p = 0;
+    for (let i = 0; i <= SEGMENTS; i++) {
+      const angle = colAngle[i];
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      for (let j = 0; j <= RINGS; j++) {
+        const t = (rowT[j] + phase) % 1;
+        const radius = radiusAt(t);
+        const y = t * DEPTH;
+        positions[p++] = cos * radius;
+        positions[p++] = sin * radius;
+        positions[p++] = -y; // into the screen
+      }
+    }
+  }
+  writeFunnel(0);
+
+  const funnelGeo = new THREE.BufferGeometry();
+  funnelGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+  // wireframe index: connect each vertex to its neighbor along the ring
+  // (same segment) and along the segment (same ring) — this reproduces the
+  // classic ring + spoke grid without needing a filled lathe surface.
+  const indices = [];
+  const stride = RINGS + 1;
+  for (let i = 0; i <= SEGMENTS; i++) {
+    for (let j = 0; j <= RINGS; j++) {
+      const idx = i * stride + j;
+      if (j < RINGS) indices.push(idx, idx + 1); // along a spoke (depth)
+      if (i < SEGMENTS) indices.push(idx, idx + stride); // along a ring
+    }
+  }
+  funnelGeo.setIndex(indices);
+
+  const funnelMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, fog: true });
+  const funnel = new THREE.LineSegments(funnelGeo, funnelMat);
+  funnelGroup.add(funnel);
+
+  // ---- countless background stars, static ----
+  const STAR_COUNT = 700;
   const starPos = new Float32Array(STAR_COUNT * 3);
   for (let i = 0; i < STAR_COUNT; i++) {
-    const u = Math.random();
-    const center = path.getPointAt(Math.min(u, 0.98));
     const angle = Math.random() * Math.PI * 2;
-    const r = TUBE_RADIUS * 0.4 + Math.random() * TUBE_RADIUS * 1.8;
-    starPos[i * 3] = center.x + Math.cos(angle) * r;
-    starPos[i * 3 + 1] = center.y + Math.sin(angle) * r;
-    starPos[i * 3 + 2] = center.z;
+    const r = 1 + Math.random() * 10;
+    starPos[i * 3] = Math.cos(angle) * r;
+    starPos[i * 3 + 1] = Math.sin(angle) * r;
+    starPos[i * 3 + 2] = -Math.random() * DEPTH * 1.3;
   }
   const starGeo = new THREE.BufferGeometry();
   starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.026, transparent: true, opacity: 0.8, fog: true });
+  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.024, transparent: true, opacity: 0.75, fog: true });
   const stars = new THREE.Points(starGeo, starMat);
   scene.add(stars);
 
   fitRenderer();
   window.addEventListener('resize', fitRenderer);
 
-  // look at ONE fixed distant point the whole time (not the next step of
-  // the path) — this is what keeps the vanishing point off to one side as
-  // the camera's position sweeps along the bend, instead of the camera
-  // re-aiming itself to center the tunnel every frame
-  const farTarget = path.getPointAt(1);
-
   const clock = new THREE.Clock();
-  const up = new THREE.Vector3(0, 1, 0);
-  let progress = 0;
+  let phase = 0;
   let frame;
 
   function animate() {
     frame = requestAnimationFrame(animate);
     const dt = Math.min(clock.getDelta(), 0.05);
 
-    // travel slowly along the curved path, looping well before the
-    // (fog-hidden) far end so the reset is invisible
-    progress += 0.015 * dt;
-    if (progress > 0.82) progress = 0;
-
-    const pos = path.getPointAt(progress);
-    camera.position.copy(pos);
-    camera.up.copy(up);
-    camera.lookAt(farTarget);
+    // slow, continuous inward flow — camera/composition never move, only
+    // the rings crawl from the mouth toward the vanishing point and loop
+    phase = (phase + 0.018 * dt) % 1;
+    writeFunnel(phase);
+    funnelGeo.attributes.position.needsUpdate = true;
 
     renderer.render(scene, camera);
   }
