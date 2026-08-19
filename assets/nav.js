@@ -55,8 +55,8 @@
     });
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    setupMegaMenus();
-    setupThemeToggles();
-  });
+  // script is loaded with `defer`, so the DOM is already parsed by the time
+  // this runs — call directly instead of waiting on DOMContentLoaded.
+  setupMegaMenus();
+  setupThemeToggles();
 })();
