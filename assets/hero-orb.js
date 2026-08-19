@@ -6,7 +6,7 @@ if (container && window.WebGLRenderingContext) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x000000, 2, 13);
 
-  const camera = new THREE.PerspectiveCamera(65, 1, 0.05, 40);
+  const camera = new THREE.PerspectiveCamera(94, 1, 0.05, 40);
   camera.position.set(0, 0, 0);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -27,15 +27,15 @@ if (container && window.WebGLRenderingContext) {
   scene.add(funnelGroup);
 
   const profile = [];
-  const RINGS = 46;
+  const RINGS = 60;
   const DEPTH = 26;
   for (let i = 0; i <= RINGS; i++) {
     const t = i / RINGS;
-    const radius = Math.max(0.03, 6.2 * Math.pow(1 - t, 2.1));
+    const radius = Math.max(0.03, 7.5 * Math.pow(1 - t, 3.4));
     const y = t * DEPTH;
     profile.push(new THREE.Vector2(radius, y));
   }
-  const funnelGeo = new THREE.LatheGeometry(profile, 40);
+  const funnelGeo = new THREE.LatheGeometry(profile, 56);
   const funnelMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.45, fog: true });
   const funnel = new THREE.Mesh(funnelGeo, funnelMat);
   funnel.rotation.x = -Math.PI / 2; // lathe's axis (local Y) now points down -Z, into the screen
