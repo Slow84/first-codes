@@ -41,6 +41,10 @@ if (container && window.WebGLRenderingContext) {
   funnel.rotation.x = -Math.PI / 2; // lathe's axis (local Y) now points down -Z, into the screen
   funnelGroup.add(funnel);
 
+  // offset the whole funnel off-axis so its vanishing point sits toward
+  // the lower-right of frame instead of dead center (matches reference)
+  funnelGroup.position.set(2.5, -1.3, 0);
+
   // ---- countless background stars ----
   const STAR_COUNT = 900;
   const starPos = new Float32Array(STAR_COUNT * 3);
@@ -68,14 +72,14 @@ if (container && window.WebGLRenderingContext) {
     const t = clock.getElapsedTime();
 
     // fly forward endlessly: dolly the camera into the funnel, loop before
-    // it reaches the (fog-hidden) tapered end
-    camera.position.z -= 1.6 * dt;
+    // it reaches the (fog-hidden) tapered end. kept slow and steady —
+    // no swaying rotation — so it's calm to look at rather than dizzying.
+    camera.position.z -= 0.35 * dt;
     if (camera.position.z < -DEPTH + 8) {
       camera.position.z = 0;
     }
 
-    funnelGroup.rotation.z = Math.sin(t * 0.08) * 0.08 + t * 0.01;
-    stars.rotation.z = -t * 0.01;
+    stars.rotation.z = -t * 0.004;
 
     renderer.render(scene, camera);
   }
