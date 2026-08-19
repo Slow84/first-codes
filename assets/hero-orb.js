@@ -26,10 +26,10 @@ if (container && window.WebGLRenderingContext) {
     new THREE.Vector3(0, 0, 0),
     new THREE.Vector3(1.2, 1.6, -5),
     new THREE.Vector3(2.6, 2.6, -10.5),
-    new THREE.Vector3(2.8, 0.8, -16),
-    new THREE.Vector3(1.6, -1.8, -21.5),
-    new THREE.Vector3(0.2, -3.6, -27),
-    new THREE.Vector3(-1.2, -4.8, -32)
+    new THREE.Vector3(3.2, 1.2, -16),
+    new THREE.Vector3(3.0, -1.5, -21.5),
+    new THREE.Vector3(2.2, -3.6, -27),
+    new THREE.Vector3(1.6, -4.8, -32)
   ];
   const path = new THREE.CatmullRomCurve3(curvePoints);
   path.curveType = 'catmullrom';
@@ -62,6 +62,12 @@ if (container && window.WebGLRenderingContext) {
   fitRenderer();
   window.addEventListener('resize', fitRenderer);
 
+  // look at ONE fixed distant point the whole time (not the next step of
+  // the path) — this is what keeps the vanishing point off to one side as
+  // the camera's position sweeps along the bend, instead of the camera
+  // re-aiming itself to center the tunnel every frame
+  const farTarget = path.getPointAt(1);
+
   const clock = new THREE.Clock();
   const up = new THREE.Vector3(0, 1, 0);
   let progress = 0;
@@ -77,10 +83,9 @@ if (container && window.WebGLRenderingContext) {
     if (progress > 0.82) progress = 0;
 
     const pos = path.getPointAt(progress);
-    const lookTarget = path.getPointAt(Math.min(progress + 0.035, 1));
     camera.position.copy(pos);
     camera.up.copy(up);
-    camera.lookAt(lookTarget);
+    camera.lookAt(farTarget);
 
     renderer.render(scene, camera);
   }
