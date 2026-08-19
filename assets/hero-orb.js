@@ -6,13 +6,13 @@ if (container && window.WebGLRenderingContext) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x000000, 3, 15);
 
-  // camera is completely fixed for the whole animation — the composition
-  // (where the vanishing point sits on screen) never changes. it looks at
-  // a point up-and-left of the tunnel's own axis, which pushes the tunnel
-  // (and its vanishing point) toward the lower-right of frame.
+  // camera is completely fixed for the whole animation, facing straight
+  // ahead — the composition (where the vanishing point sits on screen)
+  // never changes. positioning is done by offsetting the funnel geometry
+  // itself (see funnelGroup below), not by panning the camera.
   const camera = new THREE.PerspectiveCamera(76, 1, 0.05, 40);
   camera.position.set(0, 0, 0);
-  camera.lookAt(-7, 4.5, -20);
+  camera.lookAt(0, 0, -20);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -26,10 +26,10 @@ if (container && window.WebGLRenderingContext) {
     camera.updateProjectionMatrix();
   }
 
-  // ---- static funnel silhouette, offset so the vanishing point sits in
-  // the lower-right of frame (matches the reference photo) ----
+  // ---- static funnel silhouette, offset so the vanishing point sits
+  // slightly left-of-center and slightly above center (matches reference) ----
   const funnelGroup = new THREE.Group();
-  funnelGroup.position.set(5.6, -3.6, 0);
+  funnelGroup.position.set(-2.8, 1.8, 0);
   scene.add(funnelGroup);
 
   const RINGS = 56;
