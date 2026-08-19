@@ -37,7 +37,7 @@ if (container && window.WebGLRenderingContext) {
   const SEGMENTS = 64;
   const DEPTH = 20;
   const R0 = 11;
-  const POWER = 2.5;
+  const POWER = 4;
 
   function radiusAt(t) {
     return Math.max(0.02, R0 * Math.pow(1 - t, POWER));
