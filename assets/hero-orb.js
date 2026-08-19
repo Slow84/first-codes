@@ -61,8 +61,8 @@ if (container && window.WebGLRenderingContext) {
   // point so that area reads as clean darkness instead of a busy, jittery
   // cluster of tightly-packed lines.
   const FADE_IN = 0.1;
-  const FADE_OUT_START = 0.6;
-  const FADE_OUT_END = 0.74;
+  const FADE_OUT_START = 0.36;
+  const FADE_OUT_END = 0.46;
   function brightnessAt(t) {
     if (t < FADE_IN) return t / FADE_IN;
     if (t > FADE_OUT_END) return 0;
