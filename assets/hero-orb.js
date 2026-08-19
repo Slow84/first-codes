@@ -12,7 +12,7 @@ if (container && window.WebGLRenderingContext) {
   // (and its vanishing point) toward the lower-right of frame.
   const camera = new THREE.PerspectiveCamera(76, 1, 0.05, 40);
   camera.position.set(0, 0, 0);
-  camera.lookAt(-14, 9, -20);
+  camera.lookAt(-7, 4.5, -20);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -54,12 +54,19 @@ if (container && window.WebGLRenderingContext) {
   for (let j = 0; j <= RINGS; j++) rowT[j] = j / RINGS;
   for (let i = 0; i <= SEGMENTS; i++) colAngle[i] = (i / SEGMENTS) * Math.PI * 2;
 
-  // rings loop from t=1 straight back to t=0 (mouth) — fade each ring in
-  // over the first bit of its life so that reset reads as a soft appear
-  // rather than a visible pop
+  // rings loop from t=1 straight back to t=0 (mouth). fade each ring in
+  // over its first bit of life so the reset reads as a soft appear rather
+  // than a pop, and fade the deep/far rings out well before the vanishing
+  // point so that area reads as clean darkness instead of a busy, jittery
+  // cluster of tightly-packed lines.
   const FADE_IN = 0.1;
+  const FADE_OUT_START = 0.6;
+  const FADE_OUT_END = 0.74;
   function brightnessAt(t) {
-    return t < FADE_IN ? t / FADE_IN : 1;
+    if (t < FADE_IN) return t / FADE_IN;
+    if (t > FADE_OUT_END) return 0;
+    if (t > FADE_OUT_START) return 1 - (t - FADE_OUT_START) / (FADE_OUT_END - FADE_OUT_START);
+    return 1;
   }
 
   function writeFunnel(phase) {
