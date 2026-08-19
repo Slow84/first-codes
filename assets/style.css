@@ -587,45 +587,44 @@ footer.pagefoot {
 footer.pagefoot a { color: var(--text-muted); text-decoration: none; }
 footer.pagefoot a:hover { color: var(--accent); }
 
-/* hero orb */
-.hero-grid {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 40px;
-  align-items: center;
-}
-
-.hero-visual {
+/* hero: full-bleed wormhole background behind the intro copy */
+.hero-dark {
   position: relative;
+  background: #050507;
+  overflow: hidden;
+  min-height: 560px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  height: 300px;
 }
 
-.hero-visual::before {
-  content: '';
-  position: absolute;
-  width: 260px;
-  height: 260px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(34,211,238,0.28) 0%, rgba(67,56,202,0.16) 45%, transparent 72%);
-  filter: blur(6px);
+.hero-dark .section-inner { position: relative; z-index: 1; }
+
+.hero-dark .eyebrow { color: #a6a0ff; }
+.hero-dark h1 { color: #fff; }
+.hero-dark p { color: rgba(244,244,245,0.72); }
+.hero-dark .stat-label { color: rgba(244,244,245,0.5); }
+.hero-dark .stat-value { color: #fff; }
+
+.hero-dark .pill-btn.outline {
+  border-color: rgba(255,255,255,0.32);
+  color: #fff;
+}
+.hero-dark .pill-btn.outline:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: #fff;
 }
 
 #hero-orb {
-  position: relative;
-  width: 280px;
-  height: 280px;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
 }
 
-#hero-orb canvas { display: block; }
+#hero-orb canvas { display: block; width: 100% !important; height: 100% !important; }
 
 @media (max-width: 860px) {
-  .hero-grid { grid-template-columns: 1fr; }
-  .hero-visual { height: 220px; margin-top: 12px; }
-  .hero-visual::before { width: 190px; height: 190px; }
-  #hero-orb { width: 210px; height: 210px; }
+  .hero-dark { min-height: 480px; }
 }
 
 /* sitemap directory page */

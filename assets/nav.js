@@ -60,9 +60,9 @@
   }
 
   var MOBILE_LINKS = [
-    { href: '/economy/index.html', label: '경제' },
-    { href: '/life/index.html', label: '생활' },
-    { href: '/etc/lotto.html', label: '기타' }
+    { href: '/economy/index.html', label: 'Economy' },
+    { href: '/life/index.html', label: 'Life' },
+    { href: '/etc/lotto.html', label: 'Etc' }
   ];
 
   function setupMobileMenu() {
