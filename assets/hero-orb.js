@@ -4,103 +4,126 @@ const container = document.getElementById('hero-orb');
 if (container && window.WebGLRenderingContext) {
 
   const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x000000, 3, 15);
 
-  // orthographic camera: unlike a perspective camera, it never stretches a
-  // circle into an oval just because it isn't at the center of frame — a
-  // circle stays a circle no matter where we place it. this is what keeps
-  // the warped hole perfectly round even when off-center.
-  const VIEW_HEIGHT = 12;
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 40);
-  camera.position.set(0, 0, 10);
-  camera.lookAt(0, 0, 0);
+  // camera is completely fixed for the whole animation — the composition
+  // (where the vanishing point sits on screen) never changes, and it never
+  // rotates (no lookAt tilt), which is what keeps the hole circular instead
+  // of stretching into an ellipse. positioning is done purely by offsetting
+  // the funnel geometry itself (funnelGroup below).
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 40);
+  camera.position.set(0, 0, 0);
+  camera.lookAt(0, 0, -1);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   container.appendChild(renderer.domElement);
 
-  let halfW = 8, halfH = 6;
   function fitRenderer() {
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
     renderer.setSize(w, h);
-    halfH = VIEW_HEIGHT / 2;
-    halfW = halfH * (w / h);
-    camera.left = -halfW;
-    camera.right = halfW;
-    camera.top = halfH;
-    camera.bottom = -halfH;
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
 
-  // ---- flat grid, warped around a focus point like a black hole lensing
-  // the space around it — lines outside the "horizon" bend and compress as
-  // they approach it, lines far away stay almost straight ----
-  const EXTENT = 18;          // half-size of the grid before warping
-  const LINE_SPACING = 0.85;  // gap between grid lines
-  const SEGMENTS = 60;        // samples per line, for a smooth bend
-  const HORIZON = 1.0;        // radius of the empty void at the center
-  const WARP_ZONE = 2.6;      // how wide the bending zone around the void is
-  const SWIRL = 1.4;          // extra spiral twist right at the void's edge
+  // ---- static funnel silhouette, offset so the vanishing point sits
+  // slightly left-of-center and slightly above center (matches reference) ----
+  const funnelGroup = new THREE.Group();
+  funnelGroup.position.set(-2.4, 1.7, 0);
+  scene.add(funnelGroup);
 
-  function warp(x, y) {
-    const r = Math.hypot(x, y);
-    if (r < HORIZON) return null; // inside the void — don't draw
-    const d = r - HORIZON;
-    const factor = d / (d + WARP_ZONE); // 0 at the horizon, ->1 far away
-    const rp = HORIZON + d * factor;
-    const twist = SWIRL * (1 - factor);
-    const theta = Math.atan2(y, x) + twist;
-    return [Math.cos(theta) * rp, Math.sin(theta) * rp];
+  const RINGS = 56;
+  const SEGMENTS = 64;
+  const DEPTH = 20;
+  const R0 = 11;
+  const POWER = 2.5;
+
+  function radiusAt(t) {
+    return Math.max(0.02, R0 * Math.pow(1 - t, POWER));
   }
 
-  const positions = [];
-  const lineCount = Math.floor((EXTENT * 2) / LINE_SPACING);
+  // build once at t=0..1, then each frame we re-derive (radius, y) per row
+  // from a phase-shifted t — the ring silhouette (radius as a function of
+  // y) never changes, only which physical ring sits at which depth, which
+  // is what makes the rings appear to crawl inward and loop endlessly
+  // while the overall static shape stays identical every frame.
+  const positions = new Float32Array((RINGS + 1) * (SEGMENTS + 1) * 3);
+  const colors = new Float32Array((RINGS + 1) * (SEGMENTS + 1) * 3);
+  const rowT = new Float32Array(RINGS + 1);
+  const colAngle = new Float32Array(SEGMENTS + 1);
+  for (let j = 0; j <= RINGS; j++) rowT[j] = j / RINGS;
+  for (let i = 0; i <= SEGMENTS; i++) colAngle[i] = (i / SEGMENTS) * Math.PI * 2;
 
-  function addLine(fixed, axis) {
-    // axis 'h' = horizontal line (y fixed, x varies), 'v' = vertical line (x fixed, y varies)
-    let prev = null;
+  // rings loop from t=1 straight back to t=0 (mouth). fade each ring in
+  // over its first bit of life so the reset reads as a soft appear rather
+  // than a pop, and fade the deep/far rings out well before the vanishing
+  // point so that area reads as clean darkness instead of a busy, jittery
+  // cluster of tightly-packed lines.
+  const FADE_IN = 0.1;
+  const FADE_OUT_START = 0.6;
+  const FADE_OUT_END = 0.74;
+  function brightnessAt(t) {
+    if (t < FADE_IN) return t / FADE_IN;
+    if (t > FADE_OUT_END) return 0;
+    if (t > FADE_OUT_START) return 1 - (t - FADE_OUT_START) / (FADE_OUT_END - FADE_OUT_START);
+    return 1;
+  }
+
+  function writeFunnel(phase) {
+    let p = 0, c = 0;
     for (let i = 0; i <= SEGMENTS; i++) {
-      const t = (i / SEGMENTS) * (EXTENT * 2) - EXTENT;
-      const x = axis === 'h' ? t : fixed;
-      const y = axis === 'h' ? fixed : t;
-      const w = warp(x, y);
-      if (!w) { prev = null; continue; }
-      if (prev) positions.push(prev[0], prev[1], 0, w[0], w[1], 0);
-      prev = w;
+      const angle = colAngle[i];
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      for (let j = 0; j <= RINGS; j++) {
+        const t = (rowT[j] + phase) % 1;
+        const radius = radiusAt(t);
+        const y = t * DEPTH;
+        positions[p++] = cos * radius;
+        positions[p++] = sin * radius;
+        positions[p++] = -y; // into the screen
+        const b = brightnessAt(t);
+        colors[c++] = b; colors[c++] = b; colors[c++] = b;
+      }
     }
   }
+  writeFunnel(0);
 
-  for (let i = 0; i <= lineCount; i++) {
-    const pos = i * LINE_SPACING - EXTENT;
-    addLine(pos, 'h');
-    addLine(pos, 'v');
+  const funnelGeo = new THREE.BufferGeometry();
+  funnelGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  funnelGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  // wireframe index: connect each vertex to its neighbor along the ring
+  // (same segment) and along the segment (same ring) — this reproduces the
+  // classic ring + spoke grid without needing a filled lathe surface.
+  const indices = [];
+  const stride = RINGS + 1;
+  for (let i = 0; i <= SEGMENTS; i++) {
+    for (let j = 0; j <= RINGS; j++) {
+      const idx = i * stride + j;
+      if (j < RINGS) indices.push(idx, idx + 1); // along a spoke (depth)
+      if (i < SEGMENTS) indices.push(idx, idx + stride); // along a ring
+    }
   }
+  funnelGeo.setIndex(indices);
 
-  const lensGeo = new THREE.BufferGeometry();
-  lensGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
-  const lensMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
-  const lensLines = new THREE.LineSegments(lensGeo, lensMat);
-
-  // group is centered on the focus point in local space, then placed so
-  // that focus lands slightly left-of-center and slightly above center on
-  // screen. rotating this group spins the warped grid like an accretion
-  // disk without ever recomputing vertices (no per-frame reset = no pop).
-  const lensGroup = new THREE.Group();
-  lensGroup.add(lensLines);
-  lensGroup.position.set(-1.6, 1.3, 0);
-  scene.add(lensGroup);
+  const funnelMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.55, fog: true });
+  const funnel = new THREE.LineSegments(funnelGeo, funnelMat);
+  funnelGroup.add(funnel);
 
   // ---- countless background stars, static ----
   const STAR_COUNT = 700;
   const starPos = new Float32Array(STAR_COUNT * 3);
   for (let i = 0; i < STAR_COUNT; i++) {
-    starPos[i * 3] = (Math.random() * 2 - 1) * 16;
-    starPos[i * 3 + 1] = (Math.random() * 2 - 1) * 10;
-    starPos[i * 3 + 2] = -Math.random() * 5;
+    const angle = Math.random() * Math.PI * 2;
+    const r = 1 + Math.random() * 10;
+    starPos[i * 3] = Math.cos(angle) * r;
+    starPos[i * 3 + 1] = Math.sin(angle) * r;
+    starPos[i * 3 + 2] = -Math.random() * DEPTH * 1.3;
   }
   const starGeo = new THREE.BufferGeometry();
   starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.03, transparent: true, opacity: 0.7 });
+  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.024, transparent: true, opacity: 0.75, fog: true });
   const stars = new THREE.Points(starGeo, starMat);
   scene.add(stars);
 
@@ -108,12 +131,20 @@ if (container && window.WebGLRenderingContext) {
   window.addEventListener('resize', fitRenderer);
 
   const clock = new THREE.Clock();
+  let phase = 0;
   let frame;
 
   function animate() {
     frame = requestAnimationFrame(animate);
     const dt = Math.min(clock.getDelta(), 0.05);
-    lensLines.rotation.z += 0.045 * dt; // slow, continuous spin — never resets
+
+    // slow, continuous inward flow — camera/composition never move, only
+    // the rings crawl from the mouth toward the vanishing point and loop
+    phase = (phase + 0.018 * dt) % 1;
+    writeFunnel(phase);
+    funnelGeo.attributes.position.needsUpdate = true;
+    funnelGeo.attributes.color.needsUpdate = true;
+
     renderer.render(scene, camera);
   }
   animate();
