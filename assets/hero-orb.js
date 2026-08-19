@@ -4,10 +4,9 @@ const container = document.getElementById('hero-orb');
 if (container && window.WebGLRenderingContext) {
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x000000, 2, 13);
+  scene.fog = new THREE.Fog(0x000000, 2, 14);
 
-  const camera = new THREE.PerspectiveCamera(94, 1, 0.05, 40);
-  camera.position.set(0, 0, 0);
+  const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 40);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -21,43 +20,42 @@ if (container && window.WebGLRenderingContext) {
     camera.updateProjectionMatrix();
   }
 
-  // ---- funnel: a revolved profile, rendered as wireframe so it reads
-  // as a ring+spoke grid receding into the distance, like a gravity well ----
-  const funnelGroup = new THREE.Group();
-  scene.add(funnelGroup);
+  // ---- a genuinely curved tunnel: left -> up through the upper-right -> back down,
+  // built by extruding a tube along a bent path (not a straight cone) ----
+  const curvePoints = [
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(1.2, 1.6, -5),
+    new THREE.Vector3(2.6, 2.6, -10.5),
+    new THREE.Vector3(2.8, 0.8, -16),
+    new THREE.Vector3(1.6, -1.8, -21.5),
+    new THREE.Vector3(0.2, -3.6, -27),
+    new THREE.Vector3(-1.2, -4.8, -32)
+  ];
+  const path = new THREE.CatmullRomCurve3(curvePoints);
+  path.curveType = 'catmullrom';
+  path.tension = 0.5;
 
-  const profile = [];
-  const RINGS = 60;
-  const DEPTH = 26;
-  for (let i = 0; i <= RINGS; i++) {
-    const t = i / RINGS;
-    const radius = Math.max(0.03, 7.5 * Math.pow(1 - t, 3.4));
-    const y = t * DEPTH;
-    profile.push(new THREE.Vector2(radius, y));
-  }
-  const funnelGeo = new THREE.LatheGeometry(profile, 56);
-  const funnelMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.45, fog: true });
-  const funnel = new THREE.Mesh(funnelGeo, funnelMat);
-  funnel.rotation.x = -Math.PI / 2; // lathe's axis (local Y) now points down -Z, into the screen
-  funnelGroup.add(funnel);
+  const TUBE_RADIUS = 2.3;
+  const tubeGeo = new THREE.TubeGeometry(path, 220, TUBE_RADIUS, 28, false);
+  const tubeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5, fog: true, side: THREE.BackSide });
+  const tube = new THREE.Mesh(tubeGeo, tubeMat);
+  scene.add(tube);
 
-  // offset the whole funnel off-axis so its vanishing point sits toward
-  // the lower-right of frame instead of dead center (matches reference)
-  funnelGroup.position.set(2.5, -1.3, 0);
-
-  // ---- countless background stars ----
+  // ---- countless background stars, loosely following the tunnel's bend ----
   const STAR_COUNT = 900;
   const starPos = new Float32Array(STAR_COUNT * 3);
   for (let i = 0; i < STAR_COUNT; i++) {
+    const u = Math.random();
+    const center = path.getPointAt(Math.min(u, 0.98));
     const angle = Math.random() * Math.PI * 2;
-    const r = 1.5 + Math.random() * 9;
-    starPos[i * 3] = Math.cos(angle) * r;
-    starPos[i * 3 + 1] = Math.sin(angle) * r;
-    starPos[i * 3 + 2] = -Math.random() * DEPTH;
+    const r = TUBE_RADIUS * 0.4 + Math.random() * TUBE_RADIUS * 1.8;
+    starPos[i * 3] = center.x + Math.cos(angle) * r;
+    starPos[i * 3 + 1] = center.y + Math.sin(angle) * r;
+    starPos[i * 3 + 2] = center.z;
   }
   const starGeo = new THREE.BufferGeometry();
   starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.028, transparent: true, opacity: 0.85, fog: true });
+  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.026, transparent: true, opacity: 0.8, fog: true });
   const stars = new THREE.Points(starGeo, starMat);
   scene.add(stars);
 
@@ -65,21 +63,24 @@ if (container && window.WebGLRenderingContext) {
   window.addEventListener('resize', fitRenderer);
 
   const clock = new THREE.Clock();
+  const up = new THREE.Vector3(0, 1, 0);
+  let progress = 0;
   let frame;
+
   function animate() {
     frame = requestAnimationFrame(animate);
     const dt = Math.min(clock.getDelta(), 0.05);
-    const t = clock.getElapsedTime();
 
-    // fly forward endlessly: dolly the camera into the funnel, loop before
-    // it reaches the (fog-hidden) tapered end. kept slow and steady —
-    // no swaying rotation — so it's calm to look at rather than dizzying.
-    camera.position.z -= 0.35 * dt;
-    if (camera.position.z < -DEPTH + 8) {
-      camera.position.z = 0;
-    }
+    // travel slowly along the curved path, looping well before the
+    // (fog-hidden) far end so the reset is invisible
+    progress += 0.015 * dt;
+    if (progress > 0.82) progress = 0;
 
-    stars.rotation.z = -t * 0.004;
+    const pos = path.getPointAt(progress);
+    const lookTarget = path.getPointAt(Math.min(progress + 0.035, 1));
+    camera.position.copy(pos);
+    camera.up.copy(up);
+    camera.lookAt(lookTarget);
 
     renderer.render(scene, camera);
   }
