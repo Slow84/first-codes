@@ -5,22 +5,30 @@ if (container && window.WebGLRenderingContext) {
 
   const scene = new THREE.Scene();
 
-  // camera is completely fixed, facing straight ahead. the grid is a flat
-  // plane in front of it, warped by a gravitational-lens function around a
-  // focus point — not a 3D tunnel — so composition never drifts.
-  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 40);
-  camera.position.set(0, 0, 0);
-  camera.lookAt(0, 0, -1);
+  // orthographic camera: unlike a perspective camera, it never stretches a
+  // circle into an oval just because it isn't at the center of frame — a
+  // circle stays a circle no matter where we place it. this is what keeps
+  // the warped hole perfectly round even when off-center.
+  const VIEW_HEIGHT = 12;
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 40);
+  camera.position.set(0, 0, 10);
+  camera.lookAt(0, 0, 0);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   container.appendChild(renderer.domElement);
 
+  let halfW = 8, halfH = 6;
   function fitRenderer() {
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
     renderer.setSize(w, h);
-    camera.aspect = w / h;
+    halfH = VIEW_HEIGHT / 2;
+    halfW = halfH * (w / h);
+    camera.left = -halfW;
+    camera.right = halfW;
+    camera.top = halfH;
+    camera.bottom = -halfH;
     camera.updateProjectionMatrix();
   }
 
@@ -28,11 +36,11 @@ if (container && window.WebGLRenderingContext) {
   // the space around it — lines outside the "horizon" bend and compress as
   // they approach it, lines far away stay almost straight ----
   const EXTENT = 18;          // half-size of the grid before warping
-  const LINE_SPACING = 0.55;  // gap between grid lines
-  const SEGMENTS = 44;        // samples per line, for a smooth bend
-  const HORIZON = 1.1;        // radius of the empty void at the center
-  const WARP_ZONE = 2.3;      // how wide the bending zone around the void is
-  const SWIRL = 2.4;          // extra spiral twist right at the void's edge
+  const LINE_SPACING = 0.85;  // gap between grid lines
+  const SEGMENTS = 60;        // samples per line, for a smooth bend
+  const HORIZON = 1.0;        // radius of the empty void at the center
+  const WARP_ZONE = 2.6;      // how wide the bending zone around the void is
+  const SWIRL = 1.4;          // extra spiral twist right at the void's edge
 
   function warp(x, y) {
     const r = Math.hypot(x, y);
@@ -79,23 +87,20 @@ if (container && window.WebGLRenderingContext) {
   // disk without ever recomputing vertices (no per-frame reset = no pop).
   const lensGroup = new THREE.Group();
   lensGroup.add(lensLines);
-  lensGroup.position.set(-2.0, 1.6, -10);
+  lensGroup.position.set(-1.6, 1.3, 0);
   scene.add(lensGroup);
 
   // ---- countless background stars, static ----
   const STAR_COUNT = 700;
-  const STAR_DEPTH = 22;
   const starPos = new Float32Array(STAR_COUNT * 3);
   for (let i = 0; i < STAR_COUNT; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = 1 + Math.random() * 14;
-    starPos[i * 3] = Math.cos(angle) * r;
-    starPos[i * 3 + 1] = Math.sin(angle) * r;
-    starPos[i * 3 + 2] = -Math.random() * STAR_DEPTH;
+    starPos[i * 3] = (Math.random() * 2 - 1) * 16;
+    starPos[i * 3 + 1] = (Math.random() * 2 - 1) * 10;
+    starPos[i * 3 + 2] = -Math.random() * 5;
   }
   const starGeo = new THREE.BufferGeometry();
   starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.024, transparent: true, opacity: 0.7 });
+  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.03, transparent: true, opacity: 0.7 });
   const stars = new THREE.Points(starGeo, starMat);
   scene.add(stars);
 
