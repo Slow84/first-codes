@@ -78,6 +78,25 @@ a { color: inherit; }
   z-index: 40;
 }
 
+/* on the homepage, let the wormhole show through behind the nav bar too */
+body:has(.hero-dark) .topbar {
+  background: transparent;
+  border-bottom-color: rgba(255, 255, 255, 0.12);
+}
+
+body:has(.hero-dark) .topbar .logo,
+body:has(.hero-dark) .topbar .nav-links > a,
+body:has(.hero-dark) .topbar .nav-item > button {
+  color: #fff;
+}
+
+body:has(.hero-dark) .topbar .theme-toggle,
+body:has(.hero-dark) .topbar .hamburger-toggle {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
 .nav-inner {
   max-width: 1180px;
   margin: 0 auto;
@@ -587,10 +606,16 @@ footer.pagefoot {
 footer.pagefoot a { color: var(--text-muted); text-decoration: none; }
 footer.pagefoot a:hover { color: var(--accent); }
 
-/* hero: full-bleed wormhole background behind the intro copy */
+/* hero: full-bleed wormhole background behind both the nav bar and the
+   intro copy — #hero-orb is sized against .hero-wrap, not .hero-dark,
+   so the canvas extends up behind the nav too */
+.hero-wrap {
+  position: relative;
+  background: #050507; /* fallback if WebGL/JS never loads */
+}
+
 .hero-dark {
   position: relative;
-  background: #050507;
   overflow: hidden;
   min-height: 560px;
   display: flex;
