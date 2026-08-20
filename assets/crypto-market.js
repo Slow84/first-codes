@@ -32,8 +32,8 @@
   });
 
   // ---- interactive per-coin price charts with clickable time ranges ----
-  // CoinGecko's free tier (even with a demo key) 401s on days=max, so the
-  // longest range offered here is 1 year.
+  // CoinGecko's free tier (even with a demo key) 401s on days=max, so this
+  // set (no "전체") is used for CoinGecko-sourced charts (stablecoins).
   var RANGES = [
     { label: '24시간', days: '1' },
     { label: '7일', days: '7' },
@@ -41,6 +41,9 @@
     { label: '3개월', days: '90' },
     { label: '1년', days: '365' }
   ];
+  // Binance's public klines API has no such block, so the BTC/ETH/SOL/BNB
+  // charts and TVL (DeFiLlama, also unrestricted) get a real "전체" option.
+  var RANGES_WITH_MAX = RANGES.concat([{ label: '전체', days: 'max' }]);
 
   // calls CoinGecko directly from the browser. a Worker-side proxy was
   // tried instead, but CoinGecko returns 403 to requests coming from
@@ -303,12 +306,107 @@
     return resolvedKrwRate ? ' (' + fmt(usdValue * resolvedKrwRate) + ')' : '';
   }
 
-  // BTC/ETH/SOL/BNB price charts used to be a custom canvas chart here (like
-  // TVL/stablecoin below), but CoinGecko's free tier blocks the "전체"/max
-  // range even with a demo key — switched to TradingView Advanced Chart
-  // widgets instead (see the [data-tv-symbol] loop above), which has a
-  // native range selector including ALL. Trade-off: no more custom KRW
-  // display / crosshair / hi-lo stat for these four — chosen deliberately.
+  // BTC/ETH/SOL/BNB price charts: our own design (KRW parens, crosshair,
+  // hi/lo), but sourced from Binance's free public klines API instead of
+  // CoinGecko — Binance has no rate-limit key requirement and no block on
+  // long history, so "전체" genuinely works here, unlike the CoinGecko-backed
+  // charts elsewhere on this page.
+  var BINANCE_RANGE = {
+    '1': { interval: '15m', limit: 96 },
+    '7': { interval: '1h', limit: 168 },
+    '30': { interval: '4h', limit: 180 },
+    '90': { interval: '1d', limit: 90 },
+    '365': { interval: '1d', limit: 365 },
+    'max': { interval: '1w', limit: 1000 }
+  };
+
+  function fetchBinanceKlines(symbol, days) {
+    var cfg = BINANCE_RANGE[days] || BINANCE_RANGE['90'];
+    var url = 'https://api.binance.com/api/v3/klines?symbol=' + symbol +
+      '&interval=' + cfg.interval + '&limit=' + cfg.limit;
+    return fetch(url).then(function (r) { return r.json(); }).then(function (rows) {
+      if (!Array.isArray(rows)) throw new Error('no data');
+      return {
+        prices: rows.map(function (k) { return [k[0], parseFloat(k[4])]; }), // [openTime, close]
+        volumes: rows.map(function (k) { return [k[0], parseFloat(k[7])]; }) // quote (USDT) volume
+      };
+    });
+  }
+
+  function buildCoinChart(card, symbol) {
+    var tabsHtml = RANGES_WITH_MAX.map(function (r, i) {
+      return '<button type="button" class="range-tab' + (i === 0 ? ' active' : '') + '" data-days="' + r.days + '">' + r.label + '</button>';
+    }).join('');
+    card.insertAdjacentHTML('beforeend',
+      '<div class="range-tabs">' + tabsHtml + '</div>' +
+      '<div class="coin-price-now">불러오는 중...</div>' +
+      '<div class="coin-range-stat"></div>' +
+      '<canvas class="price-canvas"></canvas>'
+    );
+
+    var tabsEl = card.querySelector('.range-tabs');
+    var priceEl = card.querySelector('.coin-price-now');
+    var hiloEl = card.querySelector('.coin-range-stat');
+    var canvas = card.querySelector('.price-canvas');
+    var cache = { prices: [], volumes: [] };
+    var byRange = {};
+    var activeDays = null;
+
+    function redraw() { drawCoinChart(canvas, cache.prices, cache.volumes, fmtUsdPrice); }
+    attachCrosshair(canvas, card, function () { return cache; }, fmtUsdPrice, function (usd) {
+      return krwParen(usd, fmtKrwPrice).replace(/^ \(/, '').replace(/\)$/, '');
+    });
+
+    function apply(data) {
+      cache.prices = data.prices || [];
+      cache.volumes = data.volumes || [];
+      redraw();
+      if (cache.prices.length) {
+        var vals = cache.prices.map(function (p) { return p[1]; });
+        var last = vals[vals.length - 1];
+        var first = vals[0];
+        var hi = Math.max.apply(null, vals), lo = Math.min.apply(null, vals);
+        var chg = ((last - first) / first) * 100;
+        var cls = chg >= 0 ? 'up' : 'down';
+        var sign = chg >= 0 ? '+' : '';
+        priceEl.innerHTML = fmtUsdPrice(last) + krwParen(last, fmtKrwPrice) + '<span class="chg ' + cls + '">' + sign + chg.toFixed(2) + '%</span>';
+        hiloEl.textContent = '이 기간 최고 ' + fmtUsdPrice(hi) + ' · 최저 ' + fmtUsdPrice(lo);
+      }
+    }
+
+    function load(days) {
+      activeDays = days;
+      if (byRange[days]) { apply(byRange[days]); return; }
+      fetchBinanceKlines(symbol, days)
+        .then(function (data) {
+          byRange[days] = data;
+          if (activeDays === days) apply(data);
+        })
+        .catch(function () {
+          if (activeDays === days) priceEl.textContent = '불러오지 못했어요. 잠시 후 다시 눌러주세요.';
+        });
+    }
+
+    tabsEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('.range-tab');
+      if (!btn) return;
+      tabsEl.querySelectorAll('.range-tab').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      load(btn.getAttribute('data-days'));
+    });
+
+    load(RANGES_WITH_MAX[0].days);
+
+    var resizeTimer;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(redraw, 150);
+    });
+  }
+
+  document.querySelectorAll('[data-coin-card]').forEach(function (card) {
+    buildCoinChart(card, card.getAttribute('data-coin-card'));
+  });
 
   function escapeHtml(s) {
     var div = document.createElement('div');
@@ -390,10 +488,7 @@
     });
 
   // builds a range-tab row inside an existing container and wires clicks
-  // to onSelect(days) — shared by the TVL and stablecoin charts below.
-  // ranges defaults to RANGES (no "전체"); TVL passes RANGES_WITH_MAX since
-  // DeFiLlama (unlike CoinGecko's free tier) doesn't block full history.
-  var RANGES_WITH_MAX = RANGES.concat([{ label: '전체', days: 'max' }]);
+  // to onSelect(days) — shared by the coin, TVL, and stablecoin charts.
   function buildRangeTabs(container, onSelect, ranges) {
     if (!container) return null;
     container.innerHTML = (ranges || RANGES).map(function (r, i) {
