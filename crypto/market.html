@@ -68,14 +68,24 @@
       <div><div class="stat-label">24시간 변동</div><div class="stat-value" id="tvl24h">-</div></div>
       <div><div class="stat-label">7일 변동</div><div class="stat-value" id="tvl7d">-</div></div>
     </div>
-    <p style="font-size: 12px; color: var(--text-muted); margin-top: 10px;">출처: DeFiLlama</p>
+    <canvas class="price-canvas" id="tvlChart" style="margin-top: 16px;"></canvas>
+    <p style="font-size: 12px; color: var(--text-muted); margin-top: 10px;">최근 90일 · 출처: DeFiLlama</p>
 
     <h2 style="font-size: 17px; margin: 40px 0 16px;">스테이블코인(USDT · USDC) 발행량 추이</h2>
     <p class="disclaimer" style="background: var(--accent-soft); color: var(--accent);">지갑 간 실시간 이동(온체인 송금) 추적은 무료 API로는 제공되지 않아요. 대신 "전체 발행량(시가총액)이 늘고 있는지 줄고 있는지"로 자금 유입·유출 신호를 대신 보여드려요 — 발행량 증가는 보통 코인시장으로 자금이 들어오고 있다는 신호로 해석돼요.</p>
-    <div class="stat-grid" style="grid-template-columns: repeat(2, 1fr);" id="stableStats">
-      <div><div class="stat-label">USDT 시가총액</div><div class="stat-value" id="usdtCap">-</div><div class="rank-change" id="usdtChg" style="margin-top:6px; font-size:13px;"></div></div>
-      <div><div class="stat-label">USDC 시가총액</div><div class="stat-value" id="usdcCap">-</div><div class="rank-change" id="usdcChg" style="margin-top:6px; font-size:13px;"></div></div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h4>USDT 시가총액 <span id="usdtChg" style="float:right;"></span></h4>
+        <div class="coin-price-now" id="usdtCap">-</div>
+        <canvas class="price-canvas" id="usdtChart" style="height: 140px;"></canvas>
+      </div>
+      <div class="chart-card">
+        <h4>USDC 시가총액 <span id="usdcChg" style="float:right;"></span></h4>
+        <div class="coin-price-now" id="usdcCap">-</div>
+        <canvas class="price-canvas" id="usdcChart" style="height: 140px;"></canvas>
+      </div>
     </div>
+    <p style="font-size: 12px; color: var(--text-muted); margin-top: 10px;">최근 90일 · 출처: CoinGecko</p>
   </div>
 </section>
 

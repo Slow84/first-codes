@@ -44,7 +44,8 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
-  function drawCoinChart(canvas, prices, volumes) {
+  function drawCoinChart(canvas, prices, volumes, fmtFn) {
+    fmtFn = fmtFn || fmtKrw;
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
     var w = canvas.clientWidth, h = canvas.clientHeight;
     canvas.width = w * dpr;
@@ -80,7 +81,7 @@
       var v = yMin + (yMax - yMin) * (g / 3);
       var y = yAt(v);
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-      ctx.fillText(fmtKrw(v), w - 4, y - 4);
+      ctx.fillText(fmtFn(v), w - 4, y - 4);
     }
 
     // area fill
@@ -119,6 +120,28 @@
     }
   }
 
+  // CoinGecko's free tier blocks bursts of requests — this queue sends one
+  // request at a time, with a gap between them, no matter how many charts
+  // or tab-clicks ask for data at once.
+  var fetchQueue = [];
+  var fetchBusy = false;
+  function queueFetch(url) {
+    return new Promise(function (resolve, reject) {
+      fetchQueue.push({ url: url, resolve: resolve, reject: reject });
+      pumpQueue();
+    });
+  }
+  function pumpQueue() {
+    if (fetchBusy || !fetchQueue.length) return;
+    fetchBusy = true;
+    var job = fetchQueue.shift();
+    fetch(job.url)
+      .then(function (r) { return r.json(); })
+      .then(job.resolve)
+      .catch(job.reject)
+      .finally(function () { setTimeout(function () { fetchBusy = false; pumpQueue(); }, 700); });
+  }
+
   function buildCoinChart(card, coinId) {
     var tabsHtml = RANGES.map(function (r, i) {
       return '<button type="button" class="range-tab' + (i === 0 ? ' active' : '') + '" data-days="' + r.days + '">' + r.label + '</button>';
@@ -132,27 +155,39 @@
     var tabsEl = card.querySelector('.range-tabs');
     var priceEl = card.querySelector('.coin-price-now');
     var canvas = card.querySelector('.price-canvas');
-    var cache = { prices: [], volumes: [] };
+    var cache = { prices: [], volumes: [] }; // currently-drawn data, for resize redraws
+    var byRange = {}; // days -> { prices, volumes }, so revisiting a range never re-fetches
+    var activeDays = null;
 
     function redraw() { drawCoinChart(canvas, cache.prices, cache.volumes); }
 
+    function apply(data) {
+      cache.prices = data.prices || [];
+      cache.volumes = data.total_volumes || [];
+      redraw();
+      if (cache.prices.length) {
+        var last = cache.prices[cache.prices.length - 1][1];
+        var first = cache.prices[0][1];
+        var chg = ((last - first) / first) * 100;
+        var cls = chg >= 0 ? 'up' : 'down';
+        var sign = chg >= 0 ? '+' : '';
+        priceEl.innerHTML = fmtKrw(last) + '<span class="chg ' + cls + '">' + sign + chg.toFixed(2) + '%</span>';
+      }
+    }
+
     function load(days) {
-      fetch('https://api.coingecko.com/api/v3/coins/' + coinId + '/market_chart?vs_currency=krw&days=' + days)
-        .then(function (r) { return r.json(); })
+      activeDays = days;
+      if (byRange[days]) { apply(byRange[days]); return; } // already fetched this range before
+
+      queueFetch('https://api.coingecko.com/api/v3/coins/' + coinId + '/market_chart?vs_currency=krw&days=' + days)
         .then(function (data) {
-          cache.prices = data.prices || [];
-          cache.volumes = data.total_volumes || [];
-          redraw();
-          if (cache.prices.length) {
-            var last = cache.prices[cache.prices.length - 1][1];
-            var first = cache.prices[0][1];
-            var chg = ((last - first) / first) * 100;
-            var cls = chg >= 0 ? 'up' : 'down';
-            var sign = chg >= 0 ? '+' : '';
-            priceEl.innerHTML = fmtKrw(last) + '<span class="chg ' + cls + '">' + sign + chg.toFixed(2) + '%</span>';
-          }
+          if (!data || !data.prices) throw new Error('no data');
+          byRange[days] = data;
+          if (activeDays === days) apply(data); // ignore if the user already switched tabs
         })
-        .catch(function () { priceEl.textContent = '불러오지 못했어요'; });
+        .catch(function () {
+          if (activeDays === days) priceEl.textContent = '불러오지 못했어요. 잠시 후 다시 눌러주세요.';
+        });
     }
 
     tabsEl.addEventListener('click', function (e) {
@@ -220,7 +255,7 @@
       document.getElementById('topLosers').innerHTML = '<li class="loading-note">불러오지 못했어요</li>';
     });
 
-  // ---- DeFi TVL (DeFiLlama) ----
+  // ---- DeFi TVL (DeFiLlama) — stat tiles + 90-day trend chart ----
   fetch('https://api.llama.fi/v2/historicalChainTvl')
     .then(function (r) { return r.json(); })
     .then(function (data) {
@@ -231,12 +266,16 @@
       document.getElementById('tvlNow').textContent = fmtUsd(last);
       document.getElementById('tvl24h').innerHTML = pctSpan(((last - day) / day) * 100);
       document.getElementById('tvl7d').innerHTML = pctSpan(((last - week) / week) * 100);
+
+      var recent = data.slice(-90).map(function (d) { return [d.date * 1000, d.tvl]; });
+      var tvlCanvas = document.getElementById('tvlChart');
+      if (tvlCanvas) drawCoinChart(tvlCanvas, recent, [], fmtUsd);
     })
     .catch(function () {
       ['tvlNow', 'tvl24h', 'tvl7d'].forEach(function (id) { document.getElementById(id).textContent = '불러오지 못함'; });
     });
 
-  // ---- stablecoin market caps (proxy for USDT/USDC flow) ----
+  // ---- stablecoin market caps (proxy for USDT/USDC flow) — stats + 90-day chart ----
   fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=tether,usd-coin')
     .then(function (r) { return r.json(); })
     .then(function (coins) {
@@ -255,4 +294,17 @@
       document.getElementById('usdtCap').textContent = '불러오지 못함';
       document.getElementById('usdcCap').textContent = '불러오지 못함';
     });
+
+  function drawStablecoinChart(coinId, canvasId) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    queueFetch('https://api.coingecko.com/api/v3/coins/' + coinId + '/market_chart?vs_currency=usd&days=90')
+      .then(function (data) {
+        var caps = (data.market_caps || []);
+        drawCoinChart(canvas, caps, [], fmtUsd);
+      })
+      .catch(function () {});
+  }
+  drawStablecoinChart('tether', 'usdtChart');
+  drawStablecoinChart('usd-coin', 'usdcChart');
 })();
