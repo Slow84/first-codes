@@ -3,9 +3,12 @@
   var DETAIL_DELAY_MS = 2500; // stay well under CoinGecko's free rate limit
 
   // calls CoinGecko directly — see assets/crypto-market.js for why a
-  // Worker-side proxy doesn't work here (CoinGecko 403s Cloudflare's IPs)
+  // Worker-side proxy doesn't work here (CoinGecko 403s Cloudflare's IPs).
+  // demo key is fine to ship client-side — see assets/crypto-market.js.
+  var CG_DEMO_KEY = 'CG-FMfLVSBE5qcpYQ2R9RYTVogy';
   function cgUrl(path) {
-    return 'https://api.coingecko.com' + path;
+    var sep = path.indexOf('?') === -1 ? '?' : '&';
+    return 'https://api.coingecko.com' + path + sep + 'x_cg_demo_api_key=' + CG_DEMO_KEY;
   }
 
   // 직접 조사해서 채워넣는 수동 메모입니다. coingecko 코인 id를 key로 쓰세요.

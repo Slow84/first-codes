@@ -91,6 +91,75 @@ async function handleVisitPost(env) {
   return json({ ok: true });
 }
 
+// YouTube trending videos, keyed by region + range. The API key is read
+// from env.YOUTUBE_API_KEY (a Cloudflare secret, never committed to git).
+// "today" uses YouTube's own trending chart; "week"/"month" don't have an
+// official chart, so we approximate with "most-viewed videos published in
+// that window" (search.list, then a second call to videos.list for the
+// view counts search doesn't include).
+function mapVideoItem(item) {
+  const thumbs = (item.snippet && item.snippet.thumbnails) || {};
+  const thumb = thumbs.medium || thumbs.default || {};
+  return {
+    id: item.id,
+    title: item.snippet.title,
+    channel: item.snippet.channelTitle,
+    description: (item.snippet.description || '').slice(0, 200),
+    thumbnail: thumb.url || '',
+    views: item.statistics ? item.statistics.viewCount : null,
+    publishedAt: item.snippet.publishedAt
+  };
+}
+
+async function fetchTrending(region, key) {
+  const u = 'https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=' +
+    region + '&maxResults=10&key=' + key;
+  const r = await fetch(u);
+  const data = await r.json();
+  if (!data.items) throw new Error(data.error ? data.error.message : 'no items');
+  return data.items.map(mapVideoItem);
+}
+
+async function fetchRecentPopular(region, days, key) {
+  const publishedAfter = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const searchUrl = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=viewCount&regionCode=' +
+    region + '&publishedAfter=' + publishedAfter + '&maxResults=10&key=' + key;
+  const sr = await fetch(searchUrl);
+  const sdata = await sr.json();
+  if (!sdata.items) throw new Error(sdata.error ? sdata.error.message : 'no items');
+  const ids = sdata.items.map(function (it) { return it.id.videoId; }).filter(Boolean).join(',');
+  if (!ids) return [];
+
+  const videosUrl = 'https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=' + ids + '&key=' + key;
+  const vr = await fetch(videosUrl);
+  const vdata = await vr.json();
+  if (!vdata.items) throw new Error(vdata.error ? vdata.error.message : 'no items');
+  return vdata.items.map(mapVideoItem);
+}
+
+async function handleYoutube(env, url) {
+  if (!env.YOUTUBE_API_KEY) return json({ error: 'YouTube API 키가 아직 설정되지 않았어요.' }, 501);
+
+  const region = (url.searchParams.get('region') || 'KR').toUpperCase().slice(0, 2);
+  const range = url.searchParams.get('range') || 'today';
+  const cacheKey = 'yt:' + region + ':' + range;
+
+  const cached = await env.DATA.get(cacheKey);
+  if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+
+  let videos;
+  try {
+    if (range === 'today') videos = await fetchTrending(region, env.YOUTUBE_API_KEY);
+    else videos = await fetchRecentPopular(region, range === 'week' ? 7 : 30, env.YOUTUBE_API_KEY);
+  } catch (e) {
+    return json({ error: '유튜브 데이터를 가져오지 못했어요.' }, 502);
+  }
+
+  const text = JSON.stringify({ videos: videos });
+  await env.DATA.put(cacheKey, text, { expirationTtl: 60 * 30 }); // 30 min — trending doesn't change that fast
+  return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -104,6 +173,11 @@ export default {
     if (url.pathname === '/api/visit') {
       if (request.method === 'GET') return handleVisitGet(env);
       if (request.method === 'POST') return handleVisitPost(env);
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    if (url.pathname === '/api/yt') {
+      if (request.method === 'GET') return handleYoutube(env, url);
       return new Response('Method not allowed', { status: 405 });
     }
 

@@ -40,18 +40,63 @@
   // traffic), so the proxy made things worse, not better. the request
   // queue + per-range cache below still do the real work of avoiding
   // rate-limit trouble from one visitor clicking around quickly.
+  //
+  // the demo API key below is meant to be used client-side (CoinGecko's
+  // own model for the free Demo tier) — it only raises our own request
+  // quota, it isn't a billing credential, so it's fine to ship in public JS.
+  var CG_DEMO_KEY = 'CG-FMfLVSBE5qcpYQ2R9RYTVogy';
   function cgUrl(path) {
-    return 'https://api.coingecko.com' + path;
+    var sep = path.indexOf('?') === -1 ? '?' : '&';
+    return 'https://api.coingecko.com' + path + sep + 'x_cg_demo_api_key=' + CG_DEMO_KEY;
   }
 
   function fmtKrw(v) {
-    if (v >= 1e8) return '₩' + (v / 1e8).toFixed(2) + '억';
-    if (v >= 1e4) return '₩' + Math.round(v / 1e4).toLocaleString() + '만';
-    return '₩' + Math.round(v).toLocaleString();
+    var neg = v < 0; v = Math.abs(v);
+    var s;
+    if (v >= 1e12) s = (v / 1e12).toFixed(2) + '조';
+    else if (v >= 1e8) s = (v / 1e8).toFixed(2) + '억';
+    else if (v >= 1e4) s = Math.round(v / 1e4).toLocaleString() + '만';
+    else s = Math.round(v).toLocaleString();
+    return (neg ? '-₩' : '₩') + s;
   }
+
+  function fmtUsd(n) {
+    var neg = n < 0; n = Math.abs(n);
+    var s;
+    if (n >= 1e9) s = (n / 1e9).toFixed(2) + 'B';
+    else if (n >= 1e6) s = (n / 1e6).toFixed(1) + 'M';
+    else s = n.toLocaleString();
+    return (neg ? '-$' : '$') + s;
+  }
+
+  // for a single unit price (not an aggregate like market cap), not B/M-abbreviated
+  function fmtUsdPrice(n) {
+    var digits = n < 1 ? 4 : 2;
+    return '$' + n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+  function fmtKrwPrice(n) {
+    return '₩' + Math.round(n).toLocaleString();
+  }
+
+  // one shared USD->KRW rate for the whole page, approximated from USDC's
+  // KRW price (USDC tracks $1 closely). every chart reuses this instead of
+  // fetching each currency separately.
+  var krwRatePromise = queueFetchLater(function () {
+    return cgUrl('/api/v3/simple/price?ids=usd-coin&vs_currencies=krw');
+  }).then(function (data) {
+    return (data['usd-coin'] && data['usd-coin'].krw) || null;
+  }).catch(function () { return null; });
 
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function fmtDateLabel(ts, spanMs) {
+    var d = new Date(ts);
+    if (spanMs <= 2 * 24 * 60 * 60 * 1000) {
+      return d.getHours() + '시';
+    }
+    return (d.getMonth() + 1) + '/' + d.getDate();
   }
 
   function drawCoinChart(canvas, prices, volumes, fmtFn) {
@@ -65,13 +110,17 @@
     ctx.clearRect(0, 0, w, h);
     if (!prices.length) return;
 
-    var accent = cssVar('--accent') || '#4338CA';
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+      (document.documentElement.getAttribute('data-theme') !== 'light' &&
+        window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var accent = isDark ? (cssVar('--good') || '#4ADE94') : (cssVar('--accent') || '#4338CA');
     var border = cssVar('--border') || '#E7E7E4';
     var muted = cssVar('--text-muted') || '#6B6D70';
 
-    var priceH = h * 0.76;
-    var volTop = priceH + 12;
-    var volH = h - volTop;
+    var xAxisH = 18;
+    var priceH = (h - xAxisH) * 0.72;
+    var volTop = priceH + 10;
+    var volH = (h - xAxisH) - volTop;
 
     var vals = prices.map(function (p) { return p[1]; });
     var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
@@ -81,7 +130,7 @@
     function xAt(i) { return prices.length > 1 ? (i / (prices.length - 1)) * w : 0; }
     function yAt(v) { return priceH - ((v - yMin) / (yMax - yMin)) * priceH; }
 
-    // gridlines + price labels
+    // horizontal gridlines + price labels
     ctx.strokeStyle = border;
     ctx.lineWidth = 1;
     ctx.font = '10.5px Inter, sans-serif';
@@ -128,6 +177,20 @@
         ctx.fillRect(x - bw / 2, volTop + (volH - bh), bw, bh);
       });
     }
+
+    // x-axis date labels
+    if (prices.length > 1) {
+      var span = prices[prices.length - 1][0] - prices[0][0];
+      var labelCount = Math.min(5, prices.length);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = muted;
+      for (var li = 0; li < labelCount; li++) {
+        var idx = Math.round((li / (labelCount - 1)) * (prices.length - 1));
+        var lx = xAt(idx);
+        lx = Math.min(Math.max(lx, 22), w - 22);
+        ctx.fillText(fmtDateLabel(prices[idx][0], span), lx, h - 3);
+      }
+    }
   }
 
   // CoinGecko's free tier blocks bursts of requests — this queue sends one
@@ -141,15 +204,24 @@
       pumpQueue();
     });
   }
+  // like queueFetch, but the URL is built lazily at send-time (used for the
+  // exchange-rate call, which is enqueued before its own function exists yet)
+  function queueFetchLater(urlFn) {
+    return new Promise(function (resolve, reject) {
+      fetchQueue.push({ urlFn: urlFn, resolve: resolve, reject: reject });
+      pumpQueue();
+    });
+  }
   function pumpQueue() {
     if (fetchBusy || !fetchQueue.length) return;
     fetchBusy = true;
     var job = fetchQueue.shift();
-    fetch(job.url)
+    var url = job.urlFn ? job.urlFn() : job.url;
+    fetch(url)
       .then(function (r) { return r.json(); })
       .then(job.resolve)
       .catch(job.reject)
-      .finally(function () { setTimeout(function () { fetchBusy = false; pumpQueue(); }, 700); });
+      .finally(function () { setTimeout(function () { fetchBusy = false; pumpQueue(); }, 350); });
   }
 
   function buildCoinChart(card, coinId) {
@@ -181,7 +253,10 @@
         var chg = ((last - first) / first) * 100;
         var cls = chg >= 0 ? 'up' : 'down';
         var sign = chg >= 0 ? '+' : '';
-        priceEl.innerHTML = fmtKrw(last) + '<span class="chg ' + cls + '">' + sign + chg.toFixed(2) + '%</span>';
+        krwRatePromise.then(function (rate) {
+          var usdText = rate ? ' <span class="coin-price-usd">(' + fmtUsdPrice(last / rate) + ')</span>' : '';
+          priceEl.innerHTML = fmtKrwPrice(last) + usdText + '<span class="chg ' + cls + '">' + sign + chg.toFixed(2) + '%</span>';
+        });
       }
     }
 
@@ -228,12 +303,6 @@
     return div.innerHTML;
   }
 
-  function fmtUsd(n) {
-    if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
-    return '$' + n.toLocaleString();
-  }
-
   function pctSpan(pct) {
     var cls = pct >= 0 ? 'up' : 'down';
     var sign = pct >= 0 ? '+' : '';
@@ -241,24 +310,28 @@
   }
 
   // ---- top 5 gainers / losers (CoinGecko) ----
-  function renderRankList(id, list) {
+  function renderRankList(id, list, rate) {
     var el = document.getElementById(id);
     if (!list.length) { el.innerHTML = '<li class="loading-note">데이터가 없어요</li>'; return; }
     el.innerHTML = list.map(function (c) {
+      var vol = c.total_volume || 0;
+      var volText = fmtUsd(vol) + (rate ? ' · ' + fmtKrw(vol * rate) : '');
       return '<li class="rank-item"><span class="rank-name">' + escapeHtml(c.name) +
-        '<span class="rank-sym">' + escapeHtml(c.symbol.toUpperCase()) + '</span></span>' +
+        '<span class="rank-sym">' + escapeHtml(c.symbol.toUpperCase()) + '</span>' +
+        '<span class="rank-vol">거래대금 ' + volText + '</span></span>' +
         pctSpan(c.price_change_percentage_24h) + '</li>';
     }).join('');
   }
 
-  fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h'))
-    .then(function (r) { return r.json(); })
+  queueFetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h'))
     .then(function (coins) {
       var valid = coins.filter(function (c) { return typeof c.price_change_percentage_24h === 'number'; });
       var gainers = valid.slice().sort(function (a, b) { return b.price_change_percentage_24h - a.price_change_percentage_24h; }).slice(0, 5);
       var losers = valid.slice().sort(function (a, b) { return a.price_change_percentage_24h - b.price_change_percentage_24h; }).slice(0, 5);
-      renderRankList('topGainers', gainers);
-      renderRankList('topLosers', losers);
+      krwRatePromise.then(function (rate) {
+        renderRankList('topGainers', gainers, rate);
+        renderRankList('topLosers', losers, rate);
+      });
     })
     .catch(function () {
       document.getElementById('topGainers').innerHTML = '<li class="loading-note">불러오지 못했어요</li>';
@@ -273,7 +346,10 @@
       var last = data[n - 1].tvl;
       var day = data[n - 2] ? data[n - 2].tvl : last;
       var week = data[n - 8] ? data[n - 8].tvl : last;
-      document.getElementById('tvlNow').textContent = fmtUsd(last);
+      krwRatePromise.then(function (rate) {
+        var krwText = rate ? ' <span class="stat-sub">(' + fmtKrw(last * rate) + ')</span>' : '';
+        document.getElementById('tvlNow').innerHTML = fmtUsd(last) + krwText;
+      });
       document.getElementById('tvl24h').innerHTML = pctSpan(((last - day) / day) * 100);
       document.getElementById('tvl7d').innerHTML = pctSpan(((last - week) / week) * 100);
 
@@ -286,18 +362,17 @@
     });
 
   // ---- stablecoin market caps (proxy for USDT/USDC flow) — stats + 90-day chart ----
-  fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&ids=tether,usd-coin'))
-    .then(function (r) { return r.json(); })
+  queueFetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&ids=tether,usd-coin'))
     .then(function (coins) {
-      coins.forEach(function (c) {
-        if (c.id === 'tether') {
-          document.getElementById('usdtCap').textContent = fmtUsd(c.market_cap);
-          document.getElementById('usdtChg').innerHTML = pctSpan(c.market_cap_change_percentage_24h || 0) + ' (24h)';
-        }
-        if (c.id === 'usd-coin') {
-          document.getElementById('usdcCap').textContent = fmtUsd(c.market_cap);
-          document.getElementById('usdcChg').innerHTML = pctSpan(c.market_cap_change_percentage_24h || 0) + ' (24h)';
-        }
+      krwRatePromise.then(function (rate) {
+        coins.forEach(function (c) {
+          var capId = c.id === 'tether' ? 'usdtCap' : c.id === 'usd-coin' ? 'usdcCap' : null;
+          var chgId = c.id === 'tether' ? 'usdtChg' : c.id === 'usd-coin' ? 'usdcChg' : null;
+          if (!capId) return;
+          var krwText = rate ? ' <span class="stat-sub">(' + fmtKrw(c.market_cap * rate) + ')</span>' : '';
+          document.getElementById(capId).innerHTML = fmtUsd(c.market_cap) + krwText;
+          document.getElementById(chgId).innerHTML = pctSpan(c.market_cap_change_percentage_24h || 0) + ' (24h)';
+        });
       });
     })
     .catch(function () {
@@ -305,16 +380,21 @@
       document.getElementById('usdcCap').textContent = '불러오지 못함';
     });
 
-  function drawStablecoinChart(coinId, canvasId) {
+  function drawStablecoinChart(coinId, canvasId, statusId) {
     var canvas = document.getElementById(canvasId);
+    var statusEl = document.getElementById(statusId);
     if (!canvas) return;
     queueFetch(cgUrl('/api/v3/coins/' + coinId + '/market_chart?vs_currency=usd&days=90'))
       .then(function (data) {
         var caps = (data.market_caps || []);
+        if (!caps.length) throw new Error('no data');
         drawCoinChart(canvas, caps, [], fmtUsd);
+        if (statusEl) statusEl.textContent = '';
       })
-      .catch(function () {});
+      .catch(function () {
+        if (statusEl) statusEl.textContent = '차트를 불러오지 못했어요. 잠시 후 새로고침해주세요.';
+      });
   }
-  drawStablecoinChart('tether', 'usdtChart');
-  drawStablecoinChart('usd-coin', 'usdcChart');
+  drawStablecoinChart('tether', 'usdtChart', 'usdtChartStatus');
+  drawStablecoinChart('usd-coin', 'usdcChart', 'usdcChartStatus');
 })();

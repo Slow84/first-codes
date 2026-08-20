@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>시총 및 현황분석 · sloworld Crypto</title>
-<meta name="description" content="BTC·ETH·SOL·BNB 차트, 알트코인 대비 비트코인 도미넌스, DeFi TVL, 급등·급락 top5, 스테이블코인 발행량 추이를 한 화면에서 확인해요.">
+<title>한국 인기영상 · sloworld Etc</title>
+<meta name="description" content="오늘·이번 주·이번 달 한국 유튜브 인기 영상 TOP10을 한눈에 확인해요.">
 <meta name="google-adsense-account" content="ca-pub-2127159739328027">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2127159739328027" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,7 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.css">
 </head>
-<body>
+<body data-yt-region="KR">
 
 <nav class="topbar">
   <div class="nav-inner">
@@ -87,64 +87,20 @@
 
 <section class="section">
   <div class="section-inner">
-    <div class="breadcrumb"><a href="/crypto/index.html">Crypto</a> / 시총 및 현황분석</div>
-    <span class="eyebrow">CRYPTO</span>
-    <h1 style="font-size: 30px; max-width: 24ch;">시총 및 현황분석</h1>
-    <p style="font-size: 15px; color: var(--text-muted); max-width: 60ch; margin: 16px 0 0;">투자 조언이 아니라 참고용 시황 요약이에요. 차트와 수치는 각 데이터 제공처(TradingView, CoinGecko, DeFiLlama)에서 실시간으로 가져옵니다.</p>
+    <div class="breadcrumb"><a href="/etc/lotto.html">Etc</a> / 한국 인기영상</div>
+    <span class="eyebrow">ETC</span>
+    <h1 style="font-size: 30px; max-width: 20ch;">한국 인기영상 TOP10</h1>
+    <p style="font-size: 15px; color: var(--text-muted); max-width: 60ch; margin: 16px 0 0;">"오늘"은 유튜브 공식 인기 급상승 순위예요. "이번 주 · 이번 달"은 공식 주간/월간 차트가 따로 없어서, 해당 기간에 올라온 영상 중 조회수가 가장 높은 순으로 대신 보여드려요.</p>
 
-    <h2 style="font-size: 17px; margin: 40px 0 16px;">주요 코인 차트</h2>
-    <div class="chart-grid" id="coinCharts">
-      <div class="chart-card" data-coin-card="bitcoin"><h4>비트코인 (BTC)</h4></div>
-      <div class="chart-card" data-coin-card="ethereum"><h4>이더리움 (ETH)</h4></div>
-      <div class="chart-card" data-coin-card="solana"><h4>솔라나 (SOL)</h4></div>
-      <div class="chart-card" data-coin-card="binancecoin"><h4>바이낸스코인 (BNB)</h4></div>
+    <div class="tabs" style="margin-top: 28px;">
+      <button type="button" class="tab-btn active" data-range="today">오늘</button>
+      <button type="button" class="tab-btn" data-range="week">이번 주</button>
+      <button type="button" class="tab-btn" data-range="month">이번 달</button>
     </div>
 
-    <h2 style="font-size: 17px; margin: 40px 0 16px;">비트코인 도미넌스 · 코인 전체 시가총액</h2>
-    <div class="chart-grid">
-      <div class="chart-card"><h4>비트코인 도미넌스 (BTC.D)</h4><div data-tv-symbol="CRYPTOCAP:BTC.D"></div></div>
-      <div class="chart-card"><h4>코인 전체 시가총액</h4><div data-tv-symbol="CRYPTOCAP:TOTAL"></div></div>
+    <div id="videoGrid" class="video-grid">
+      <p class="loading-note">불러오는 중...</p>
     </div>
-    <p class="disclaimer" style="background: var(--accent-soft); color: var(--accent);">비트코인 도미넌스가 하락하면 보통 알트코인 시총이 BTC 대비 커지고 있다는 신호로 해석돼요.</p>
-
-    <h2 style="font-size: 17px; margin: 40px 0 16px;">급등 · 급락 TOP5 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(24시간 기준, 시총 상위 100개 코인 중)</span></h2>
-    <div class="rank-grid">
-      <div class="tool-card">
-        <div class="mega-col-title">급등 TOP5</div>
-        <ul class="rank-list" id="topGainers"><li class="loading-note">불러오는 중...</li></ul>
-      </div>
-      <div class="tool-card">
-        <div class="mega-col-title">급락 TOP5</div>
-        <ul class="rank-list" id="topLosers"><li class="loading-note">불러오는 중...</li></ul>
-      </div>
-    </div>
-
-    <h2 style="font-size: 17px; margin: 40px 0 16px;">DeFi TVL (예치자산총액)</h2>
-    <div class="stat-grid stat-grid-3" id="tvlStats">
-      <div><div class="stat-label">현재 TVL</div><div class="stat-value" id="tvlNow">-</div></div>
-      <div><div class="stat-label">24시간 변동</div><div class="stat-value" id="tvl24h">-</div></div>
-      <div><div class="stat-label">7일 변동</div><div class="stat-value" id="tvl7d">-</div></div>
-    </div>
-    <canvas class="price-canvas" id="tvlChart" style="margin-top: 16px;"></canvas>
-    <p style="font-size: 12px; color: var(--text-muted); margin-top: 10px;">최근 90일 · 출처: DeFiLlama</p>
-
-    <h2 style="font-size: 17px; margin: 40px 0 16px;">스테이블코인(USDT · USDC) 발행량 추이</h2>
-    <p class="disclaimer" style="background: var(--accent-soft); color: var(--accent);">지갑 간 실시간 이동(온체인 송금) 추적은 무료 API로는 제공되지 않아요. 대신 "전체 발행량(시가총액)이 늘고 있는지 줄고 있는지"로 자금 유입·유출 신호를 대신 보여드려요 — 발행량 증가는 보통 코인시장으로 자금이 들어오고 있다는 신호로 해석돼요.</p>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <h4>USDT 시가총액 <span id="usdtChg" style="float:right;"></span></h4>
-        <div class="coin-price-now" id="usdtCap">-</div>
-        <canvas class="price-canvas" id="usdtChart" style="height: 140px;"></canvas>
-        <p id="usdtChartStatus" class="loading-note"></p>
-      </div>
-      <div class="chart-card">
-        <h4>USDC 시가총액 <span id="usdcChg" style="float:right;"></span></h4>
-        <div class="coin-price-now" id="usdcCap">-</div>
-        <canvas class="price-canvas" id="usdcChart" style="height: 140px;"></canvas>
-        <p id="usdcChartStatus" class="loading-note"></p>
-      </div>
-    </div>
-    <p style="font-size: 12px; color: var(--text-muted); margin-top: 10px;">최근 90일 · 출처: CoinGecko</p>
   </div>
 </section>
 
@@ -154,6 +110,6 @@
 </footer>
 
 <script src="/assets/nav.js" defer></script>
-<script src="/assets/crypto-market.js" defer></script>
+<script src="/assets/youtube.js" defer></script>
 </body>
 </html>
