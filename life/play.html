@@ -105,7 +105,10 @@
         <div class="result-body" id="result-body">
           <div class="detail-box">
             <div class="detail-title">준비물</div>
-            <p id="result-materials"></p>
+            <div class="ing-row" style="border-bottom: none; padding: 0;">
+              <p id="result-materials" style="margin: 0;"></p>
+              <a id="result-materials-buy" class="ing-buy" href="#" target="_blank" rel="noopener" style="margin-left: auto;">구매</a>
+            </div>
           </div>
           <div class="detail-box">
             <div class="detail-title">발달 포인트</div>
@@ -238,6 +241,13 @@
     document.getElementById('result-name').innerText = item.name;
     document.getElementById('result-desc').innerText = item.desc;
     document.getElementById('result-materials').innerText = item.materials;
+    const buyLink = document.getElementById('result-materials-buy');
+    if (item.materials === '준비물 없음') {
+      buyLink.style.display = 'none';
+    } else {
+      buyLink.style.display = '';
+      buyLink.href = `https://www.coupang.com/np/search?q=${encodeURIComponent(item.materials)}`;
+    }
     document.getElementById('result-benefit').innerText = item.benefit;
     document.getElementById('result-body').classList.add('show');
   }
