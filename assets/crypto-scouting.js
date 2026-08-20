@@ -2,10 +2,10 @@
   var MAX_CANDIDATES = 15;
   var DETAIL_DELAY_MS = 2500; // stay well under CoinGecko's free rate limit
 
-  // route through our own Worker instead of calling CoinGecko directly —
-  // see assets/crypto-market.js for why
+  // calls CoinGecko directly — see assets/crypto-market.js for why a
+  // Worker-side proxy doesn't work here (CoinGecko 403s Cloudflare's IPs)
   function cgUrl(path) {
-    return '/api/cg?path=' + encodeURIComponent(path);
+    return 'https://api.coingecko.com' + path;
   }
 
   // 직접 조사해서 채워넣는 수동 메모입니다. coingecko 코인 id를 key로 쓰세요.

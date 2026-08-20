@@ -34,11 +34,14 @@
     { label: '전체', days: 'max' }
   ];
 
-  // CoinGecko calls go through our own Worker (/api/cg) instead of the
-  // visitor's browser hitting CoinGecko directly — sidesteps per-visitor
-  // rate limits and lets repeat requests share a short server-side cache.
+  // calls CoinGecko directly from the browser. a Worker-side proxy was
+  // tried instead, but CoinGecko returns 403 to requests coming from
+  // Cloudflare's own IPs (common with free APIs blocking datacenter/server
+  // traffic), so the proxy made things worse, not better. the request
+  // queue + per-range cache below still do the real work of avoiding
+  // rate-limit trouble from one visitor clicking around quickly.
   function cgUrl(path) {
-    return '/api/cg?path=' + encodeURIComponent(path);
+    return 'https://api.coingecko.com' + path;
   }
 
   function fmtKrw(v) {
