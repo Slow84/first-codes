@@ -151,40 +151,23 @@ if (container && window.WebGLRenderingContext) {
   starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
   starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
 
-  // a hand-drawn four-point sparkle for each star (soft core + two crossing
-  // light rays) — drawn with canvas instead of an external image so there's
-  // no licensing question and nothing that can go missing later. without a
-  // sprite at all, WebGL draws every point as a plain hard-edged square,
-  // which is what read as flat "dots" before.
+  // a soft round dot, like a single star in a long-exposure night-sky photo
+  // — a bright pinpoint core fading into a gentle glow, no hard edges.
+  // drawn with canvas instead of a photo so there's no licensing question
+  // and nothing that can go missing later.
   function makeStarSprite() {
-    const size = 64;
+    const size = 32;
     const c = size / 2;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = size;
     const ctx = canvas.getContext('2d');
-    ctx.globalCompositeOperation = 'lighter';
-
-    function ray(width, length, angle) {
-      ctx.save();
-      ctx.translate(c, c);
-      ctx.rotate(angle);
-      const g = ctx.createLinearGradient(0, -length / 2, 0, length / 2);
-      g.addColorStop(0, 'rgba(255,255,255,0)');
-      g.addColorStop(0.5, 'rgba(255,255,255,0.95)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(-width / 2, -length / 2, width, length);
-      ctx.restore();
-    }
-    ray(1.6, size * 0.95, 0);
-    ray(1.6, size * 0.95, Math.PI / 2);
-
-    const core = ctx.createRadialGradient(c, c, 0, c, c, size * 0.22);
-    core.addColorStop(0, 'rgba(255,255,255,1)');
-    core.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = core;
+    const g = ctx.createRadialGradient(c, c, 0, c, c, c);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.2, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.25)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
     ctx.fillRect(0, 0, size, size);
-
     return new THREE.CanvasTexture(canvas);
   }
 
