@@ -1,24 +1,31 @@
 (function () {
-  // ---- TradingView mini chart widgets ----
+  // ---- TradingView Advanced Chart widgets (has its own built-in range
+  // selector, 1D through ALL — free to embed, no TradingView account needed) ----
   var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   document.querySelectorAll('[data-tv-symbol]').forEach(function (el) {
     var container = document.createElement('div');
     container.className = 'tradingview-widget-container';
+    container.style.height = '400px';
     var inner = document.createElement('div');
     inner.className = 'tradingview-widget-container__widget';
+    inner.style.height = '100%';
     container.appendChild(inner);
     var script = document.createElement('script');
     script.type = 'text/javascript';
-    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js';
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
     script.async = true;
     script.text = JSON.stringify({
       symbol: el.getAttribute('data-tv-symbol'),
       width: '100%',
-      height: 220,
+      height: '100%',
       locale: 'kr',
-      dateRange: '1M',
-      colorTheme: isDark ? 'dark' : 'light',
-      isTransparent: true
+      range: '3M',
+      theme: isDark ? 'dark' : 'light',
+      style: '3',
+      timezone: 'Asia/Seoul',
+      withdateranges: true,
+      hide_side_toolbar: true,
+      allow_symbol_change: false
     });
     container.appendChild(script);
     el.appendChild(container);
@@ -91,7 +98,7 @@
     return (d.getMonth() + 1) + '/' + d.getDate();
   }
 
-  function drawCoinChart(canvas, prices, volumes, fmtFn) {
+  function drawCoinChart(canvas, prices, volumes, fmtFn, hoverIndex) {
     fmtFn = fmtFn || fmtKrw;
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
     var w = canvas.clientWidth, h = canvas.clientHeight;
@@ -183,6 +190,63 @@
         ctx.fillText(fmtDateLabel(prices[idx][0], span), lx, h - 3);
       }
     }
+
+    // crosshair: a vertical guide line + highlighted dot at the hovered point
+    if (hoverIndex != null && prices[hoverIndex]) {
+      var hx = xAt(hoverIndex);
+      var hp = prices[hoverIndex];
+      var hy = yAt(hp[1]);
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = muted;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, priceH); ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.arc(hx, hy, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = accent;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = cssVar('--bg') || '#fff';
+      ctx.stroke();
+    }
+  }
+
+  // wires a mouse-following crosshair + tooltip onto a chart. dataFn must
+  // return the currently-drawn { prices, volumes } (volumes optional) at
+  // call time, since the active range can change after a tab click.
+  function attachCrosshair(canvas, wrapEl, dataFn, fmtFn) {
+    var tip = document.createElement('div');
+    tip.className = 'chart-tooltip';
+    if (getComputedStyle(wrapEl).position === 'static') wrapEl.style.position = 'relative';
+    wrapEl.appendChild(tip);
+
+    function hide() {
+      var d = dataFn();
+      drawCoinChart(canvas, d.prices || [], d.volumes || [], fmtFn);
+      tip.style.display = 'none';
+    }
+
+    canvas.addEventListener('mousemove', function (e) {
+      var d = dataFn();
+      var prices = d.prices || [];
+      if (prices.length < 2) return;
+      var rect = canvas.getBoundingClientRect();
+      var x = e.clientX - rect.left;
+      var idx = Math.round((x / rect.width) * (prices.length - 1));
+      idx = Math.max(0, Math.min(prices.length - 1, idx));
+      drawCoinChart(canvas, prices, d.volumes || [], fmtFn, idx);
+
+      var p = prices[idx];
+      var dt = new Date(p[0]);
+      var dateStr = (dt.getMonth() + 1) + '/' + dt.getDate() + ' ' + dt.getHours() + '시';
+      tip.innerHTML = '<div class="chart-tooltip-date">' + dateStr + '</div><div class="chart-tooltip-val">' + fmtFn(p[1]) + '</div>';
+      tip.style.display = 'block';
+      var tipX = (idx / (prices.length - 1)) * rect.width;
+      tip.style.left = Math.min(Math.max(tipX, 55), rect.width - 55) + 'px';
+      tip.style.top = canvas.offsetTop + 6 + 'px';
+    });
+    canvas.addEventListener('mouseleave', hide);
   }
 
   // CoinGecko's free tier blocks bursts of requests — this queue sends one
@@ -245,6 +309,7 @@
     var activeDays = null;
 
     function redraw() { drawCoinChart(canvas, cache.prices, cache.volumes); }
+    attachCrosshair(canvas, card, function () { return cache; }, fmtKrw);
 
     function apply(data) {
       cache.prices = data.prices || [];
@@ -381,13 +446,15 @@
       document.getElementById('tvl7d').innerHTML = pctSpan(((last - week) / week) * 100);
 
       var tvlCanvas = document.getElementById('tvlChart');
+      var tvlCurrent = [];
       function drawRange(days) {
         var n2 = DAYS_PER_RANGE[days] || 90;
-        var recent = data.slice(-n2).map(function (d) { return [d.date * 1000, d.tvl]; });
-        if (tvlCanvas) drawCoinChart(tvlCanvas, recent, [], fmtUsd);
+        tvlCurrent = data.slice(-n2).map(function (d) { return [d.date * 1000, d.tvl]; });
+        if (tvlCanvas) drawCoinChart(tvlCanvas, tvlCurrent, [], fmtUsd);
       }
       buildRangeTabs(document.getElementById('tvlTabs'), drawRange);
       drawRange('90');
+      if (tvlCanvas) attachCrosshair(tvlCanvas, document.getElementById('tvlChartWrap'), function () { return { prices: tvlCurrent }; }, fmtUsd);
     })
     .catch(function () {
       ['tvlNow', 'tvl24h', 'tvl7d'].forEach(function (id) { document.getElementById(id).textContent = '불러오지 못함'; });
@@ -417,14 +484,16 @@
     var statusEl = document.getElementById(statusId);
     if (!canvas) return;
     var byRange = {};
+    var current = [];
 
     function load(days) {
-      if (byRange[days]) { drawCoinChart(canvas, byRange[days], [], fmtUsd); if (statusEl) statusEl.textContent = ''; return; }
+      if (byRange[days]) { current = byRange[days]; drawCoinChart(canvas, current, [], fmtUsd); if (statusEl) statusEl.textContent = ''; return; }
       queueFetch(cgUrl('/api/v3/coins/' + coinId + '/market_chart?vs_currency=usd&days=' + days))
         .then(function (data) {
           var caps = (data.market_caps || []);
           if (!caps.length) throw new Error('no data');
           byRange[days] = caps;
+          current = caps;
           drawCoinChart(canvas, caps, [], fmtUsd);
           if (statusEl) statusEl.textContent = '';
         })
@@ -434,6 +503,7 @@
     }
     buildRangeTabs(document.getElementById(tabsId), load);
     load(RANGES[0].days);
+    attachCrosshair(canvas, canvas.parentElement, function () { return { prices: current }; }, fmtUsd);
   }
   buildStablecoinChart('tether', 'usdtChart', 'usdtChartStatus', 'usdtTabs');
   buildStablecoinChart('usd-coin', 'usdcChart', 'usdcChartStatus', 'usdcTabs');
