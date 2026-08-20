@@ -150,7 +150,48 @@ if (container && window.WebGLRenderingContext) {
   const starGeo = new THREE.BufferGeometry();
   starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
   starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
-  const starMat = new THREE.PointsMaterial({ vertexColors: true, size: 0.05, transparent: true, opacity: 0.85, fog: true });
+
+  // a hand-drawn four-point sparkle for each star (soft core + two crossing
+  // light rays) — drawn with canvas instead of an external image so there's
+  // no licensing question and nothing that can go missing later. without a
+  // sprite at all, WebGL draws every point as a plain hard-edged square,
+  // which is what read as flat "dots" before.
+  function makeStarSprite() {
+    const size = 64;
+    const c = size / 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.globalCompositeOperation = 'lighter';
+
+    function ray(width, length, angle) {
+      ctx.save();
+      ctx.translate(c, c);
+      ctx.rotate(angle);
+      const g = ctx.createLinearGradient(0, -length / 2, 0, length / 2);
+      g.addColorStop(0, 'rgba(255,255,255,0)');
+      g.addColorStop(0.5, 'rgba(255,255,255,0.95)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(-width / 2, -length / 2, width, length);
+      ctx.restore();
+    }
+    ray(1.6, size * 0.95, 0);
+    ray(1.6, size * 0.95, Math.PI / 2);
+
+    const core = ctx.createRadialGradient(c, c, 0, c, c, size * 0.22);
+    core.addColorStop(0, 'rgba(255,255,255,1)');
+    core.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = core;
+    ctx.fillRect(0, 0, size, size);
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  const starMat = new THREE.PointsMaterial({
+    vertexColors: true, size: 0.075, map: makeStarSprite(),
+    transparent: true, opacity: 0.9, depthWrite: false, fog: true
+  });
   const stars = new THREE.Points(starGeo, starMat);
   funnelGroup.add(stars);
 
