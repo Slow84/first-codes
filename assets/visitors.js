@@ -4,9 +4,9 @@
 
   function render(data) {
     el.innerHTML =
-      '<span>오늘 <strong>' + data.today.toLocaleString() + '</strong></span>' +
+      '<span>Today <strong>' + data.today.toLocaleString() + '</strong></span>' +
       '<span class="visitor-sep">·</span>' +
-      '<span>이번 주 <strong>' + data.week.toLocaleString() + '</strong></span>';
+      '<span>This week <strong>' + data.week.toLocaleString() + '</strong></span>';
   }
 
   function load() {

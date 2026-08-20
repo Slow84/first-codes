@@ -91,6 +91,38 @@ async function handleVisitPost(env) {
   return json({ ok: true });
 }
 
+// Proxies CoinGecko's public API through this Worker instead of letting
+// every visitor's browser call it directly — one visitor with a rate-limited
+// IP no longer breaks the charts for them, and repeated identical requests
+// (from any visitor) are served from a short KV cache instead of hitting
+// CoinGecko again. Only /api/v3/... paths are allowed through.
+const CG_BASE = 'https://api.coingecko.com';
+const CG_CACHE_SECONDS = 60;
+
+async function handleCoinGeckoProxy(env, url) {
+  const path = url.searchParams.get('path') || '';
+  if (!path.startsWith('/api/v3/')) return json({ error: 'invalid path' }, 400);
+
+  const cacheKey = 'cg:' + path;
+  const cached = await env.DATA.get(cacheKey);
+  if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+
+  let upstream;
+  try {
+    upstream = await fetch(CG_BASE + path, { headers: { Accept: 'application/json' } });
+  } catch (e) {
+    return json({ error: 'upstream request failed' }, 502);
+  }
+  const text = await upstream.text();
+  if (upstream.ok) {
+    await env.DATA.put(cacheKey, text, { expirationTtl: CG_CACHE_SECONDS });
+  }
+  return new Response(text, {
+    status: upstream.status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' }
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -104,6 +136,11 @@ export default {
     if (url.pathname === '/api/visit') {
       if (request.method === 'GET') return handleVisitGet(env);
       if (request.method === 'POST') return handleVisitPost(env);
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    if (url.pathname === '/api/cg') {
+      if (request.method === 'GET') return handleCoinGeckoProxy(env, url);
       return new Response('Method not allowed', { status: 405 });
     }
 

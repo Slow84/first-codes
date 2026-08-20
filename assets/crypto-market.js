@@ -34,6 +34,13 @@
     { label: '전체', days: 'max' }
   ];
 
+  // CoinGecko calls go through our own Worker (/api/cg) instead of the
+  // visitor's browser hitting CoinGecko directly — sidesteps per-visitor
+  // rate limits and lets repeat requests share a short server-side cache.
+  function cgUrl(path) {
+    return '/api/cg?path=' + encodeURIComponent(path);
+  }
+
   function fmtKrw(v) {
     if (v >= 1e8) return '₩' + (v / 1e8).toFixed(2) + '억';
     if (v >= 1e4) return '₩' + Math.round(v / 1e4).toLocaleString() + '만';
@@ -179,7 +186,7 @@
       activeDays = days;
       if (byRange[days]) { apply(byRange[days]); return; } // already fetched this range before
 
-      queueFetch('https://api.coingecko.com/api/v3/coins/' + coinId + '/market_chart?vs_currency=krw&days=' + days)
+      queueFetch(cgUrl('/api/v3/coins/' + coinId + '/market_chart?vs_currency=krw&days=' + days))
         .then(function (data) {
           if (!data || !data.prices) throw new Error('no data');
           byRange[days] = data;
@@ -241,7 +248,7 @@
     }).join('');
   }
 
-  fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h')
+  fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h'))
     .then(function (r) { return r.json(); })
     .then(function (coins) {
       var valid = coins.filter(function (c) { return typeof c.price_change_percentage_24h === 'number'; });
@@ -276,7 +283,7 @@
     });
 
   // ---- stablecoin market caps (proxy for USDT/USDC flow) — stats + 90-day chart ----
-  fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=tether,usd-coin')
+  fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&ids=tether,usd-coin'))
     .then(function (r) { return r.json(); })
     .then(function (coins) {
       coins.forEach(function (c) {
@@ -298,7 +305,7 @@
   function drawStablecoinChart(coinId, canvasId) {
     var canvas = document.getElementById(canvasId);
     if (!canvas) return;
-    queueFetch('https://api.coingecko.com/api/v3/coins/' + coinId + '/market_chart?vs_currency=usd&days=90')
+    queueFetch(cgUrl('/api/v3/coins/' + coinId + '/market_chart?vs_currency=usd&days=90'))
       .then(function (data) {
         var caps = (data.market_caps || []);
         drawCoinChart(canvas, caps, [], fmtUsd);

@@ -2,6 +2,12 @@
   var MAX_CANDIDATES = 15;
   var DETAIL_DELAY_MS = 2500; // stay well under CoinGecko's free rate limit
 
+  // route through our own Worker instead of calling CoinGecko directly —
+  // see assets/crypto-market.js for why
+  function cgUrl(path) {
+    return '/api/cg?path=' + encodeURIComponent(path);
+  }
+
   // 직접 조사해서 채워넣는 수동 메모입니다. coingecko 코인 id를 key로 쓰세요.
   // 예: 'ethereum': '2014년 ICO, a16z 등 다수 VC 투자. 재단 재무 매우 안정적.'
   var INVESTOR_NOTES = {
@@ -67,14 +73,14 @@
 
   function fetchDetailsSequentially(list, i) {
     if (i >= list.length) return;
-    fetch('https://api.coingecko.com/api/v3/coins/' + list[i].id + '?localization=false&tickers=false&market_data=false&community_data=true&developer_data=true&sparkline=false')
+    fetch(cgUrl('/api/v3/coins/' + list[i].id + '?localization=false&tickers=false&market_data=false&community_data=true&developer_data=true&sparkline=false'))
       .then(function (r) { return r.json(); })
       .then(function (detail) { fillDetail(list[i].id, detail); })
       .catch(function () { failDetail(list[i].id); })
       .finally(function () { setTimeout(function () { fetchDetailsSequentially(list, i + 1); }, DETAIL_DELAY_MS); });
   }
 
-  fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false')
+  fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false'))
     .then(function (r) { return r.json(); })
     .then(function (coins) {
       var candidates = coins

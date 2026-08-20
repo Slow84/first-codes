@@ -639,12 +639,19 @@ footer.pagefoot a:hover { color: var(--accent); }
   border-color: #fff;
 }
 
+/* same max-width/centering formula as .nav-inner, so this right-aligns to
+   exactly the same edge as the theme toggle above it, at any viewport width */
 .visitor-stats {
   position: absolute;
   top: 76px;
-  right: 24px;
+  left: 0;
+  right: 0;
   z-index: 2;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
   display: flex;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px;
   font-size: 12px;
@@ -654,7 +661,7 @@ footer.pagefoot a:hover { color: var(--accent); }
 .visitor-stats .visitor-sep { opacity: 0.4; }
 
 @media (max-width: 640px) {
-  .visitor-stats { top: 68px; right: 16px; font-size: 11px; }
+  .visitor-stats { top: 68px; padding: 0 16px; font-size: 11px; }
 }
 
 #hero-orb {
