@@ -78,15 +78,6 @@
     return '₩' + Math.round(n).toLocaleString();
   }
 
-  // one shared USD->KRW rate for the whole page, approximated from USDC's
-  // KRW price (USDC tracks $1 closely). every chart reuses this instead of
-  // fetching each currency separately.
-  var krwRatePromise = queueFetchLater(function () {
-    return cgUrl('/api/v3/simple/price?ids=usd-coin&vs_currencies=krw');
-  }).then(function (data) {
-    return (data['usd-coin'] && data['usd-coin'].krw) || null;
-  }).catch(function () { return null; });
-
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
@@ -223,6 +214,17 @@
       .catch(job.reject)
       .finally(function () { setTimeout(function () { fetchBusy = false; pumpQueue(); }, 350); });
   }
+
+  // one shared USD->KRW rate for the whole page, approximated from USDC's
+  // KRW price (USDC tracks $1 closely). every chart reuses this instead of
+  // fetching each currency separately. must be defined after queueFetchLater
+  // above it — calling it before fetchQueue/pumpQueue exist throws, and the
+  // rejection was silently swallowed, which is why USD amounts never showed.
+  var krwRatePromise = queueFetchLater(function () {
+    return cgUrl('/api/v3/simple/price?ids=usd-coin&vs_currencies=krw');
+  }).then(function (data) {
+    return (data['usd-coin'] && data['usd-coin'].krw) || null;
+  }).catch(function () { return null; });
 
   function buildCoinChart(card, coinId) {
     var tabsHtml = RANGES.map(function (r, i) {
