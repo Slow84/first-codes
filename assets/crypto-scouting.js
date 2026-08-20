@@ -30,76 +30,130 @@
     return String(n);
   }
 
-  function fmtUsd(n) {
+  function fmtUsdAgg(n) {
     if (n == null) return '-';
     if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
     if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
     return '$' + n.toLocaleString();
   }
 
-  function shellCard(c) {
-    var note = INVESTOR_NOTES[c.id];
-    return '<div class="coin-card" id="coin-' + c.id + '">' +
-      '<div class="coin-card-head">' +
-      '<img src="' + c.image + '" alt="" loading="lazy">' +
-      '<strong>' + escapeHtml(c.name) + '</strong>' +
-      '<span class="rank-sym">' + escapeHtml(c.symbol.toUpperCase()) + '</span>' +
-      '</div>' +
-      '<div class="coin-ath">최고점 대비 ' + c.ath_change_percentage.toFixed(1) + '% · 현재가 ' + fmtUsd(c.current_price) + ' · 시총 순위 #' + c.market_cap_rank + '</div>' +
-      '<div class="coin-meta-grid" data-detail="' + c.id + '"><div class="loading-note">개발·커뮤니티 지표 불러오는 중...</div></div>' +
-      '<div class="investor-note">주요 투자자·재단 재무건전성: ' + (note ? escapeHtml(note) : '아직 조사 전') + '</div>' +
-      '<div class="coin-links"><a href="https://www.coingecko.com/en/coins/' + c.id + '" target="_blank" rel="noopener">CoinGecko에서 자세히 보기 →</a></div>' +
-      '</div>';
+  function fmtUsdPrice(n) {
+    if (n == null) return '-';
+    var digits = n < 1 ? 4 : 2;
+    return '$' + n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   }
 
-  function fillDetail(id, detail) {
-    var el = document.querySelector('[data-detail="' + id + '"]');
-    if (!el) return;
-    var dev = detail.developer_data || {};
-    var com = detail.community_data || {};
-    var items = [
-      ['깃허브 스타', fmtNum(dev.stars)],
-      ['최근 4주 커밋', fmtNum(dev.commit_count_4_weeks)],
-      ['트위터 팔로워', fmtNum(com.twitter_followers)],
-      ['텔레그램 유저', fmtNum(com.telegram_channel_user_count)],
-      ['레딧 구독자', fmtNum(com.reddit_subscribers)]
-    ];
-    el.innerHTML = items.map(function (it) {
-      return '<div class="coin-meta-item"><span class="coin-meta-label">' + it[0] + '</span><span class="coin-meta-value">' + it[1] + '</span></div>';
-    }).join('');
+  var table = document.getElementById('candidateTable');
+  var tbody = document.getElementById('candidateBody');
+  var loadingMsg = document.getElementById('loadingMsg');
+  if (!table || !tbody) return;
+
+  var candidates = [];
+  var sortKey = 'market_cap_rank';
+  var sortDir = 1; // 1 = ascending, -1 = descending
+
+  function cellValue(c, key) {
+    switch (key) {
+      case 'name': return (c.name || '').toLowerCase();
+      case 'current_price': return c.current_price || 0;
+      case 'market_cap': return c.market_cap || 0;
+      case 'market_cap_rank': return c.market_cap_rank || 0;
+      case 'ath_change_percentage': return c.ath_change_percentage || 0;
+      case 'total_volume': return c.total_volume || 0;
+      case 'exchanges': return c.exchanges == null ? -1 : c.exchanges;
+      case 'devScore': return c.devScore == null ? -1 : c.devScore;
+      case 'communityScore': return c.communityScore == null ? -1 : c.communityScore;
+      default: return 0;
+    }
   }
 
-  function failDetail(id) {
-    var el = document.querySelector('[data-detail="' + id + '"]');
-    if (el) el.innerHTML = '<div class="loading-note">개발·커뮤니티 지표를 불러오지 못했어요</div>';
+  function renderRow(c) {
+    return '<tr>' +
+      '<td><a class="coin-cell coin-link" href="https://www.coingecko.com/en/coins/' + c.id + '" target="_blank" rel="noopener">' +
+        '<img src="' + c.image + '" alt="" loading="lazy">' +
+        '<strong>' + escapeHtml(c.name) + '</strong><span>' + escapeHtml(c.symbol.toUpperCase()) + '</span>' +
+      '</a></td>' +
+      '<td>' + fmtUsdPrice(c.current_price) + '</td>' +
+      '<td>' + fmtUsdAgg(c.market_cap) + '</td>' +
+      '<td>#' + (c.market_cap_rank || '-') + '</td>' +
+      '<td class="cell-warn">' + (c.ath_change_percentage != null ? c.ath_change_percentage.toFixed(1) + '%' : '-') + '</td>' +
+      '<td>' + fmtUsdAgg(c.total_volume) + '</td>' +
+      '<td class="cell-muted">' + (c.exchanges != null ? c.exchanges : '준비중') + '</td>' +
+      '<td>' + (c.devScore != null ? fmtNum(c.devScore) : '<span class="cell-muted">불러오는 중</span>') + '</td>' +
+      '<td>' + (c.communityScore != null ? fmtNum(c.communityScore) : '<span class="cell-muted">불러오는 중</span>') + '</td>' +
+      '</tr>';
   }
 
-  function fetchDetailsSequentially(list, i) {
-    if (i >= list.length) return;
-    fetch(cgUrl('/api/v3/coins/' + list[i].id + '?localization=false&tickers=false&market_data=false&community_data=true&developer_data=true&sparkline=false'))
+  function render() {
+    var sorted = candidates.slice().sort(function (a, b) {
+      var av = cellValue(a, sortKey), bv = cellValue(b, sortKey);
+      if (av < bv) return -1 * sortDir;
+      if (av > bv) return 1 * sortDir;
+      return 0;
+    });
+    tbody.innerHTML = sorted.map(renderRow).join('');
+
+    table.querySelectorAll('th').forEach(function (th) {
+      var key = th.getAttribute('data-sort');
+      th.classList.toggle('sorted', key === sortKey);
+      var arrow = th.querySelector('.sort-arrow');
+      if (arrow) arrow.remove();
+      if (key === sortKey) {
+        th.insertAdjacentHTML('beforeend', '<span class="sort-arrow">' + (sortDir === 1 ? '▲' : '▼') + '</span>');
+      }
+    });
+  }
+
+  table.querySelectorAll('th[data-sort]').forEach(function (th) {
+    th.addEventListener('click', function () {
+      var key = th.getAttribute('data-sort');
+      if (sortKey === key) sortDir = -sortDir;
+      else { sortKey = key; sortDir = 1; }
+      render();
+    });
+  });
+
+  function fetchDetailsSequentially(i) {
+    if (i >= candidates.length) return;
+    var c = candidates[i];
+    fetch(cgUrl('/api/v3/coins/' + c.id + '?localization=false&tickers=false&market_data=false&community_data=true&developer_data=true&sparkline=false'))
       .then(function (r) { return r.json(); })
-      .then(function (detail) { fillDetail(list[i].id, detail); })
-      .catch(function () { failDetail(list[i].id); })
-      .finally(function () { setTimeout(function () { fetchDetailsSequentially(list, i + 1); }, DETAIL_DELAY_MS); });
+      .then(function (detail) {
+        var dev = detail.developer_data || {};
+        var com = detail.community_data || {};
+        c.devScore = dev.stars != null ? dev.stars : 0;
+        c.communityScore = (com.twitter_followers || 0) + (com.telegram_channel_user_count || 0) + (com.reddit_subscribers || 0);
+      })
+      .catch(function () { c.devScore = 0; c.communityScore = 0; })
+      .finally(function () {
+        render();
+        setTimeout(function () { fetchDetailsSequentially(i + 1); }, DETAIL_DELAY_MS);
+      });
   }
 
   fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false'))
     .then(function (r) { return r.json(); })
     .then(function (coins) {
-      var candidates = coins
+      candidates = coins
         .filter(function (c) { return typeof c.ath_change_percentage === 'number' && c.ath_change_percentage <= -90; })
-        .slice(0, MAX_CANDIDATES);
+        .slice(0, MAX_CANDIDATES)
+        .map(function (c) {
+          c.exchanges = null;
+          c.devScore = null;
+          c.communityScore = null;
+          return c;
+        });
 
-      document.getElementById('loadingMsg').remove();
-      var listEl = document.getElementById('candidateList');
+      if (loadingMsg) loadingMsg.remove();
       if (!candidates.length) {
-        listEl.innerHTML = '<p class="loading-note">지금은 조건에 맞는 코인이 없어요.</p>';
+        table.insertAdjacentHTML('afterend', '<p class="loading-note">지금은 조건에 맞는 코인이 없어요.</p>');
         return;
       }
-      listEl.innerHTML = candidates.map(shellCard).join('');
-      fetchDetailsSequentially(candidates, 0);
+      table.style.display = '';
+      render();
+      fetchDetailsSequentially(0);
     })
     .catch(function () {
-      document.getElementById('loadingMsg').textContent = '데이터를 불러오지 못했어요. 잠시 후 새로고침해주세요.';
+      if (loadingMsg) loadingMsg.textContent = '데이터를 불러오지 못했어요. 잠시 후 새로고침해주세요.';
     });
 })();

@@ -98,7 +98,25 @@
     </div>
 
     <p class="loading-note" id="loadingMsg">시가총액 상위 250개 코인을 불러오는 중...</p>
-    <div id="candidateList"></div>
+    <div class="table-wrap">
+      <table class="data-table" id="candidateTable" style="display:none;">
+        <thead>
+          <tr>
+            <th data-sort="name">코인</th>
+            <th data-sort="current_price">현재가</th>
+            <th data-sort="market_cap">시가총액</th>
+            <th data-sort="market_cap_rank">시총순위</th>
+            <th data-sort="ath_change_percentage">ATH대비</th>
+            <th data-sort="total_volume">거래량(24h)</th>
+            <th data-sort="exchanges">활성거래소</th>
+            <th data-sort="devScore">개발지수</th>
+            <th data-sort="communityScore">커뮤니티</th>
+          </tr>
+        </thead>
+        <tbody id="candidateBody"></tbody>
+      </table>
+    </div>
+    <p style="font-size: 11.5px; color: var(--text-muted); margin-top: 10px;">열 제목을 클릭하면 그 기준으로 정렬돼요. "활성거래소"는 준비 중이라 곧 채워질 예정이에요.</p>
   </div>
 </section>
 

@@ -32,7 +32,6 @@
         '<div class="video-rank">#' + (i + 1) + '</div>' +
         '<div class="video-title">' + escapeHtml(v.title) + '</div>' +
         '<div class="video-meta">' + escapeHtml(v.channel) + ' · 조회수 ' + fmtViews(v.views) + '</div>' +
-        '<div class="video-desc">' + escapeHtml(v.description) + '</div>' +
         '</div></a>';
     }).join('');
   }

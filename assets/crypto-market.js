@@ -314,14 +314,18 @@
   // ---- top 5 gainers / losers (CoinGecko) ----
   function renderRankList(id, list, rate) {
     var el = document.getElementById(id);
-    if (!list.length) { el.innerHTML = '<li class="loading-note">데이터가 없어요</li>'; return; }
+    if (!list.length) { el.innerHTML = '<tr><td colspan="4" class="loading-note">데이터가 없어요</td></tr>'; return; }
     el.innerHTML = list.map(function (c) {
       var vol = c.total_volume || 0;
       var volText = fmtUsd(vol) + (rate ? ' · ' + fmtKrw(vol * rate) : '');
-      return '<li class="rank-item"><span class="rank-name">' + escapeHtml(c.name) +
-        '<span class="rank-sym">' + escapeHtml(c.symbol.toUpperCase()) + '</span>' +
-        '<span class="rank-vol">거래대금 ' + volText + '</span></span>' +
-        pctSpan(c.price_change_percentage_24h) + '</li>';
+      var price = c.current_price || 0;
+      var priceText = fmtUsdPrice(price) + (rate ? ' · ' + fmtKrwPrice(price * rate) : '');
+      return '<tr>' +
+        '<td><div class="coin-cell"><strong>' + escapeHtml(c.name) + '</strong><span>' + escapeHtml(c.symbol.toUpperCase()) + '</span></div></td>' +
+        '<td>' + priceText + '</td>' +
+        '<td>' + pctSpan(c.price_change_percentage_24h) + '</td>' +
+        '<td class="cell-muted">' + volText + '</td>' +
+        '</tr>';
     }).join('');
   }
 
