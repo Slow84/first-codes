@@ -172,7 +172,7 @@ if (container && window.WebGLRenderingContext) {
   }
 
   const starMat = new THREE.PointsMaterial({
-    vertexColors: true, size: 0.075, map: makeStarSprite(),
+    vertexColors: true, size: 0.05, map: makeStarSprite(),
     transparent: true, opacity: 0.9, depthWrite: false, fog: true
   });
   const stars = new THREE.Points(starGeo, starMat);
