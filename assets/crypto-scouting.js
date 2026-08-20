@@ -131,29 +131,51 @@
       });
   }
 
-  fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false'))
-    .then(function (r) { return r.json(); })
-    .then(function (coins) {
-      candidates = coins
-        .filter(function (c) { return typeof c.ath_change_percentage === 'number' && c.ath_change_percentage <= -90; })
-        .slice(0, MAX_CANDIDATES)
-        .map(function (c) {
-          c.exchanges = null;
-          c.devScore = null;
-          c.communityScore = null;
-          return c;
-        });
+  // scan market-cap rank 500-4000 instead of the top 250 — coins that
+  // famous already aren't really "hidden gems." 250-per-page, so that's
+  // pages 3 through 16 (rank 501-4000), fetched one at a time to be gentle
+  // on the API.
+  var START_PAGE = 3, END_PAGE = 16;
+  var PAGE_DELAY_MS = 1500;
+  var allCoins = [];
 
-      if (loadingMsg) loadingMsg.remove();
-      if (!candidates.length) {
-        table.insertAdjacentHTML('afterend', '<p class="loading-note">지금은 조건에 맞는 코인이 없어요.</p>');
-        return;
-      }
-      table.style.display = '';
-      render();
-      fetchDetailsSequentially(0);
-    })
-    .catch(function () {
-      if (loadingMsg) loadingMsg.textContent = '데이터를 불러오지 못했어요. 잠시 후 새로고침해주세요.';
-    });
+  function fetchPage(page) {
+    if (loadingMsg) loadingMsg.textContent = '시가총액 500~4000위 코인을 불러오는 중... (' + (page - START_PAGE + 1) + '/' + (END_PAGE - START_PAGE + 1) + ')';
+    fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=' + page + '&sparkline=false'))
+      .then(function (r) { return r.json(); })
+      .then(function (coins) {
+        if (Array.isArray(coins)) allCoins = allCoins.concat(coins);
+      })
+      .catch(function () {})
+      .finally(function () {
+        if (page < END_PAGE) {
+          setTimeout(function () { fetchPage(page + 1); }, PAGE_DELAY_MS);
+        } else {
+          finishLoading();
+        }
+      });
+  }
+
+  function finishLoading() {
+    candidates = allCoins
+      .filter(function (c) { return typeof c.ath_change_percentage === 'number' && c.ath_change_percentage <= -90; })
+      .slice(0, MAX_CANDIDATES)
+      .map(function (c) {
+        c.exchanges = null;
+        c.devScore = null;
+        c.communityScore = null;
+        return c;
+      });
+
+    if (loadingMsg) loadingMsg.remove();
+    if (!candidates.length) {
+      table.insertAdjacentHTML('afterend', '<p class="loading-note">지금은 조건에 맞는 코인이 없어요.</p>');
+      return;
+    }
+    table.style.display = '';
+    render();
+    fetchDetailsSequentially(0);
+  }
+
+  fetchPage(START_PAGE);
 })();

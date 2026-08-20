@@ -65,7 +65,7 @@ async function handleCommentsPost(request, env) {
   if (list.length > MAX_COMMENTS_PER_PAGE) list.splice(0, list.length - MAX_COMMENTS_PER_PAGE);
 
   await env.DATA.put(key, JSON.stringify(list));
-  await env.DATA.put(rateKey, String(Date.now()), { expirationTtl: RATE_LIMIT_SECONDS + 5 });
+  await env.DATA.put(rateKey, String(Date.now()), { expirationTtl: 60 }); // KV requires expirationTtl >= 60s; the 30s rate-limit check above is enforced in code, this is just cleanup
 
   return json({ ok: true });
 }

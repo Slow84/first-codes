@@ -5,7 +5,7 @@
   document.querySelectorAll('[data-tv-symbol]').forEach(function (el) {
     var container = document.createElement('div');
     container.className = 'tradingview-widget-container';
-    container.style.height = '400px';
+    container.style.height = '600px';
     var inner = document.createElement('div');
     inner.className = 'tradingview-widget-container__widget';
     inner.style.height = '100%';
@@ -215,7 +215,9 @@
   // wires a mouse-following crosshair + tooltip onto a chart. dataFn must
   // return the currently-drawn { prices, volumes } (volumes optional) at
   // call time, since the active range can change after a tab click.
-  function attachCrosshair(canvas, wrapEl, dataFn, fmtFn) {
+  // secondaryFn(rawValue), if given, adds a second currency line (e.g. KRW
+  // under a USD-denominated chart) — return '' to skip it for a given point.
+  function attachCrosshair(canvas, wrapEl, dataFn, fmtFn, secondaryFn) {
     var tip = document.createElement('div');
     tip.className = 'chart-tooltip';
     if (getComputedStyle(wrapEl).position === 'static') wrapEl.style.position = 'relative';
@@ -240,7 +242,10 @@
       var p = prices[idx];
       var dt = new Date(p[0]);
       var dateStr = (dt.getMonth() + 1) + '/' + dt.getDate() + ' ' + dt.getHours() + '시';
-      tip.innerHTML = '<div class="chart-tooltip-date">' + dateStr + '</div><div class="chart-tooltip-val">' + fmtFn(p[1]) + '</div>';
+      var sub = secondaryFn ? secondaryFn(p[1]) : '';
+      tip.innerHTML = '<div class="chart-tooltip-date">' + dateStr + '</div>' +
+        '<div class="chart-tooltip-val">' + fmtFn(p[1]) + '</div>' +
+        (sub ? '<div class="chart-tooltip-sub">' + sub + '</div>' : '');
       tip.style.display = 'block';
       var tipX = (idx / (prices.length - 1)) * rect.width;
       tip.style.left = Math.min(Math.max(tipX, 55), rect.width - 55) + 'px';
@@ -290,80 +295,20 @@
   }).then(function (data) {
     return (data['usd-coin'] && data['usd-coin'].krw) || null;
   }).catch(function () { return null; });
-
-  function buildCoinChart(card, coinId) {
-    var tabsHtml = RANGES.map(function (r, i) {
-      return '<button type="button" class="range-tab' + (i === 0 ? ' active' : '') + '" data-days="' + r.days + '">' + r.label + '</button>';
-    }).join('');
-    card.insertAdjacentHTML('beforeend',
-      '<div class="range-tabs">' + tabsHtml + '</div>' +
-      '<div class="coin-price-now">불러오는 중...</div>' +
-      '<canvas class="price-canvas"></canvas>'
-    );
-
-    var tabsEl = card.querySelector('.range-tabs');
-    var priceEl = card.querySelector('.coin-price-now');
-    var canvas = card.querySelector('.price-canvas');
-    var cache = { prices: [], volumes: [] }; // currently-drawn data, for resize redraws
-    var byRange = {}; // days -> { prices, volumes }, so revisiting a range never re-fetches
-    var activeDays = null;
-
-    function redraw() { drawCoinChart(canvas, cache.prices, cache.volumes); }
-    attachCrosshair(canvas, card, function () { return cache; }, fmtKrw);
-
-    function apply(data) {
-      cache.prices = data.prices || [];
-      cache.volumes = data.total_volumes || [];
-      redraw();
-      if (cache.prices.length) {
-        var last = cache.prices[cache.prices.length - 1][1];
-        var first = cache.prices[0][1];
-        var chg = ((last - first) / first) * 100;
-        var cls = chg >= 0 ? 'up' : 'down';
-        var sign = chg >= 0 ? '+' : '';
-        krwRatePromise.then(function (rate) {
-          var usdText = rate ? ' <span class="coin-price-usd">(' + fmtUsdPrice(last / rate) + ')</span>' : '';
-          priceEl.innerHTML = fmtKrwPrice(last) + usdText + '<span class="chg ' + cls + '">' + sign + chg.toFixed(2) + '%</span>';
-        });
-      }
-    }
-
-    function load(days) {
-      activeDays = days;
-      if (byRange[days]) { apply(byRange[days]); return; } // already fetched this range before
-
-      queueFetch(cgUrl('/api/v3/coins/' + coinId + '/market_chart?vs_currency=krw&days=' + days))
-        .then(function (data) {
-          if (!data || !data.prices) throw new Error('no data');
-          byRange[days] = data;
-          if (activeDays === days) apply(data); // ignore if the user already switched tabs
-        })
-        .catch(function () {
-          if (activeDays === days) priceEl.textContent = '불러오지 못했어요. 잠시 후 다시 눌러주세요.';
-        });
-    }
-
-    tabsEl.addEventListener('click', function (e) {
-      var btn = e.target.closest('.range-tab');
-      if (!btn) return;
-      tabsEl.querySelectorAll('.range-tab').forEach(function (b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      load(btn.getAttribute('data-days'));
-    });
-
-    load(RANGES[0].days);
-
-    // redraw from cached data on resize — refetching per resize tick would spam the API
-    var resizeTimer;
-    window.addEventListener('resize', function () {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(redraw, 150);
-    });
+  // cached synchronously once resolved, so things like the crosshair (which
+  // needs a value on every mousemove, not just once) don't need to re-await
+  var resolvedKrwRate = null;
+  krwRatePromise.then(function (r) { resolvedKrwRate = r; });
+  function krwParen(usdValue, fmt) {
+    return resolvedKrwRate ? ' (' + fmt(usdValue * resolvedKrwRate) + ')' : '';
   }
 
-  document.querySelectorAll('[data-coin-card]').forEach(function (card) {
-    buildCoinChart(card, card.getAttribute('data-coin-card'));
-  });
+  // BTC/ETH/SOL/BNB price charts used to be a custom canvas chart here (like
+  // TVL/stablecoin below), but CoinGecko's free tier blocks the "전체"/max
+  // range even with a demo key — switched to TradingView Advanced Chart
+  // widgets instead (see the [data-tv-symbol] loop above), which has a
+  // native range selector including ALL. Trade-off: no more custom KRW
+  // display / crosshair / hi-lo stat for these four — chosen deliberately.
 
   function escapeHtml(s) {
     var div = document.createElement('div');
@@ -377,15 +322,25 @@
     return '<span class="rank-change ' + cls + '">' + sign + pct.toFixed(2) + '%</span>';
   }
 
-  // ---- top 5 gainers / losers (CoinGecko) ----
-  function renderRankList(id, list, rate) {
-    var el = document.getElementById(id);
+  // ---- top 5 gainers / losers (CoinGecko), sortable by clicking a header ----
+  function rankCellValue(c, key) {
+    switch (key) {
+      case 'name': return (c.name || '').toLowerCase();
+      case 'current_price': return c.current_price || 0;
+      case 'price_change_percentage_24h': return c.price_change_percentage_24h || 0;
+      case 'total_volume': return c.total_volume || 0;
+      default: return 0;
+    }
+  }
+
+  function renderRankList(tbodyId, list, rate) {
+    var el = document.getElementById(tbodyId);
     if (!list.length) { el.innerHTML = '<tr><td colspan="4" class="loading-note">데이터가 없어요</td></tr>'; return; }
     el.innerHTML = list.map(function (c) {
       var vol = c.total_volume || 0;
-      var volText = fmtUsd(vol) + (rate ? ' · ' + fmtKrw(vol * rate) : '');
+      var volText = fmtUsd(vol) + krwParen(vol, fmtKrw);
       var price = c.current_price || 0;
-      var priceText = fmtUsdPrice(price) + (rate ? ' · ' + fmtKrwPrice(price * rate) : '');
+      var priceText = fmtUsdPrice(price) + krwParen(price, fmtKrwPrice);
       return '<tr>' +
         '<td><div class="coin-cell"><strong>' + escapeHtml(c.name) + '</strong><span>' + escapeHtml(c.symbol.toUpperCase()) + '</span></div></td>' +
         '<td>' + priceText + '</td>' +
@@ -395,26 +350,53 @@
     }).join('');
   }
 
+  function setupRankSort(tableEl, getList, rateGetter, tbodyId) {
+    if (!tableEl) return;
+    var sortKey = null, sortDir = 1;
+    tableEl.querySelectorAll('th[data-sort]').forEach(function (th) {
+      th.addEventListener('click', function () {
+        var key = th.getAttribute('data-sort');
+        if (sortKey === key) sortDir = -sortDir; else { sortKey = key; sortDir = 1; }
+        tableEl.querySelectorAll('th').forEach(function (t) {
+          t.classList.toggle('sorted', t === th);
+          var a = t.querySelector('.sort-arrow'); if (a) a.remove();
+        });
+        th.insertAdjacentHTML('beforeend', '<span class="sort-arrow">' + (sortDir === 1 ? '▲' : '▼') + '</span>');
+        var sorted = getList().slice().sort(function (a, b) {
+          var av = rankCellValue(a, key), bv = rankCellValue(b, key);
+          return av < bv ? -sortDir : av > bv ? sortDir : 0;
+        });
+        renderRankList(tbodyId, sorted, rateGetter());
+      });
+    });
+  }
+
+  var gainersList = [], losersList = [];
   queueFetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h'))
     .then(function (coins) {
       var valid = coins.filter(function (c) { return typeof c.price_change_percentage_24h === 'number'; });
-      var gainers = valid.slice().sort(function (a, b) { return b.price_change_percentage_24h - a.price_change_percentage_24h; }).slice(0, 5);
-      var losers = valid.slice().sort(function (a, b) { return a.price_change_percentage_24h - b.price_change_percentage_24h; }).slice(0, 5);
+      gainersList = valid.slice().sort(function (a, b) { return b.price_change_percentage_24h - a.price_change_percentage_24h; }).slice(0, 5);
+      losersList = valid.slice().sort(function (a, b) { return a.price_change_percentage_24h - b.price_change_percentage_24h; }).slice(0, 5);
       krwRatePromise.then(function (rate) {
-        renderRankList('topGainers', gainers, rate);
-        renderRankList('topLosers', losers, rate);
+        renderRankList('topGainers', gainersList, rate);
+        renderRankList('topLosers', losersList, rate);
       });
+      setupRankSort(document.getElementById('topGainers').closest('table'), function () { return gainersList; }, function () { return resolvedKrwRate; }, 'topGainers');
+      setupRankSort(document.getElementById('topLosers').closest('table'), function () { return losersList; }, function () { return resolvedKrwRate; }, 'topLosers');
     })
     .catch(function () {
-      document.getElementById('topGainers').innerHTML = '<li class="loading-note">불러오지 못했어요</li>';
-      document.getElementById('topLosers').innerHTML = '<li class="loading-note">불러오지 못했어요</li>';
+      document.getElementById('topGainers').innerHTML = '<tr><td colspan="4" class="loading-note">불러오지 못했어요</td></tr>';
+      document.getElementById('topLosers').innerHTML = '<tr><td colspan="4" class="loading-note">불러오지 못했어요</td></tr>';
     });
 
   // builds a range-tab row inside an existing container and wires clicks
   // to onSelect(days) — shared by the TVL and stablecoin charts below.
-  function buildRangeTabs(container, onSelect) {
+  // ranges defaults to RANGES (no "전체"); TVL passes RANGES_WITH_MAX since
+  // DeFiLlama (unlike CoinGecko's free tier) doesn't block full history.
+  var RANGES_WITH_MAX = RANGES.concat([{ label: '전체', days: 'max' }]);
+  function buildRangeTabs(container, onSelect, ranges) {
     if (!container) return null;
-    container.innerHTML = RANGES.map(function (r, i) {
+    container.innerHTML = (ranges || RANGES).map(function (r, i) {
       return '<button type="button" class="range-tab' + (i === 0 ? ' active' : '') + '" data-days="' + r.days + '">' + r.label + '</button>';
     }).join('');
     container.addEventListener('click', function (e) {
@@ -448,11 +430,11 @@
       var tvlCanvas = document.getElementById('tvlChart');
       var tvlCurrent = [];
       function drawRange(days) {
-        var n2 = DAYS_PER_RANGE[days] || 90;
+        var n2 = days === 'max' ? data.length : (DAYS_PER_RANGE[days] || 90);
         tvlCurrent = data.slice(-n2).map(function (d) { return [d.date * 1000, d.tvl]; });
         if (tvlCanvas) drawCoinChart(tvlCanvas, tvlCurrent, [], fmtUsd);
       }
-      buildRangeTabs(document.getElementById('tvlTabs'), drawRange);
+      buildRangeTabs(document.getElementById('tvlTabs'), drawRange, RANGES_WITH_MAX);
       drawRange('90');
       if (tvlCanvas) attachCrosshair(tvlCanvas, document.getElementById('tvlChartWrap'), function () { return { prices: tvlCurrent }; }, fmtUsd);
     })
