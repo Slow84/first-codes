@@ -1,0 +1,11 @@
+name = "first-codes"
+main = "worker.js"
+compatibility_date = "2026-08-20"
+
+[assets]
+directory = "./"
+binding = "ASSETS"
+
+[[kv_namespaces]]
+binding = "DATA"
+id = "3893c8b1f25d4604a1aabc95363ba1ee"

@@ -62,6 +62,7 @@
   var MOBILE_LINKS = [
     { href: '/economy/index.html', label: 'Economy' },
     { href: '/life/index.html', label: 'Life' },
+    { href: '/crypto/index.html', label: 'Crypto' },
     { href: '/etc/lotto.html', label: 'Etc' }
   ];
 

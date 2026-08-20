@@ -56,11 +56,26 @@
         </div>
       </div>
 
+      <div class="nav-item">
+        <button type="button">Crypto</button>
+        <div class="mega narrow">
+          <div class="mega-cols one-col">
+            <div>
+              <div class="mega-col-title">암호화폐</div>
+              <a class="mega-link" href="/crypto/market.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg></span><span><strong>시총 및 현황분석</strong><span>주요 코인 차트, TVL, 급등락 top5</span></span></a>
+              <a class="mega-link" href="/crypto/scouting.html"><span class="mega-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span><span><strong>투자 코인 발굴</strong><span>고점 대비 하락, 개발·커뮤니티 활발</span></span></a>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <a href="/etc/lotto.html">Etc</a>
     </div>
     <a href="/inquiry.html" class="nav-cta">제휴 문의</a>
   </div>
 </nav>
+
+<div id="visitorStats" class="visitor-stats"></div>
 
 <section class="section hero-dark">
   <div class="section-inner">
@@ -136,15 +151,16 @@
 <section class="section">
   <div class="section-inner" style="max-width: 780px;">
     <span class="eyebrow" style="display:block; margin-bottom: 20px;">comment</span>
-    <div id="cusdis_thread"
-      data-host="https://cusdis.com"
-      data-app-id="476013b1-63d2-4940-a44a-20d0438f23f2"
-      data-page-id="home"
-      data-page-url="https://sloworld.xyz/"
-      data-page-title="sloworld"
-      data-theme="light"
-    ></div>
-    <script async defer src="https://cusdis.com/js/cusdis.es.js"></script>
+    <form id="commentForm">
+      <input type="text" id="commentName" class="comment-field" placeholder="닉네임" maxlength="40" required>
+      <textarea id="commentText" class="comment-field" placeholder="댓글을 남겨주세요" maxlength="1000" rows="3" required></textarea>
+      <input type="text" id="commentWebsite" name="website" class="comment-honeypot" autocomplete="off" tabindex="-1" aria-hidden="true">
+      <div class="comment-foot">
+        <span id="commentMsg" class="comment-msg"></span>
+        <button type="submit" class="pill-btn accent" style="padding:10px 22px;">등록</button>
+      </div>
+    </form>
+    <div id="commentList" style="margin-top: 28px;"></div>
   </div>
 </section>
 
@@ -155,5 +171,7 @@
 
 <script src="/assets/nav.js" defer></script>
 <script type="module" src="/assets/hero-orb.js"></script>
+<script src="/assets/visitors.js" defer></script>
+<script src="/assets/comments.js" defer></script>
 </body>
 </html>

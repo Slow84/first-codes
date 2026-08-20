@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>시총 및 현황분석 · sloworld Crypto</title>
+<meta name="description" content="BTC·ETH·SOL·BNB 차트, 알트코인 대비 비트코인 도미넌스, DeFi TVL, 급등·급락 top5, 스테이블코인 발행량 추이를 한 화면에서 확인해요.">
+<meta name="google-adsense-account" content="ca-pub-2127159739328027">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2127159739328027" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="nav-inner">
+    <a href="/index.html" class="logo">sloworld</a>
+    <div class="nav-links">
+      <a href="/economy/index.html">Economy</a>
+      <a href="/life/index.html">Life</a>
+      <a href="/crypto/index.html">Crypto</a>
+      <a href="/etc/lotto.html">Etc</a>
+    </div>
+    <a href="/inquiry.html" class="nav-cta">제휴 문의</a>
+  </div>
+</nav>
+
+<section class="section">
+  <div class="section-inner">
+    <div class="breadcrumb"><a href="/crypto/index.html">Crypto</a> / 시총 및 현황분석</div>
+    <span class="eyebrow">CRYPTO</span>
+    <h1 style="font-size: 30px; max-width: 24ch;">시총 및 현황분석</h1>
+    <p style="font-size: 15px; color: var(--text-muted); max-width: 60ch; margin: 16px 0 0;">투자 조언이 아니라 참고용 시황 요약이에요. 차트와 수치는 각 데이터 제공처(TradingView, CoinGecko, DeFiLlama)에서 실시간으로 가져옵니다.</p>
+
+    <h2 style="font-size: 17px; margin: 40px 0 16px;">주요 코인 차트</h2>
+    <div class="chart-grid">
+      <div class="chart-card"><h4>BTC / USDT</h4><div data-tv-symbol="BINANCE:BTCUSDT"></div></div>
+      <div class="chart-card"><h4>ETH / USDT</h4><div data-tv-symbol="BINANCE:ETHUSDT"></div></div>
+      <div class="chart-card"><h4>SOL / USDT</h4><div data-tv-symbol="BINANCE:SOLUSDT"></div></div>
+      <div class="chart-card"><h4>BNB / USDT</h4><div data-tv-symbol="BINANCE:BNBUSDT"></div></div>
+    </div>
+
+    <h2 style="font-size: 17px; margin: 40px 0 16px;">비트코인 도미넌스 · 코인 전체 시총 vs 증시</h2>
+    <div class="chart-grid">
+      <div class="chart-card"><h4>비트코인 도미넌스 (BTC.D)</h4><div data-tv-symbol="CRYPTOCAP:BTC.D"></div></div>
+      <div class="chart-card"><h4>코인 전체 시가총액</h4><div data-tv-symbol="CRYPTOCAP:TOTAL"></div></div>
+      <div class="chart-card"><h4>S&amp;P 500</h4><div data-tv-symbol="SP:SPX"></div></div>
+    </div>
+    <p class="disclaimer" style="background: var(--accent-soft); color: var(--accent);">이 세 차트는 "실제 자금이 주식에서 코인으로 이동했다"는 걸 증명하는 지표가 아니라, 두 시장의 추세를 나란히 비교해보는 참고용이에요. 비트코인 도미넌스가 하락하면 보통 알트코인 시총이 BTC 대비 커지고 있다는 신호로 해석돼요.</p>
+
+    <h2 style="font-size: 17px; margin: 40px 0 16px;">급등 · 급락 TOP5 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(24시간 기준, 시총 상위 100개 코인 중)</span></h2>
+    <div class="rank-grid">
+      <div class="tool-card">
+        <div class="mega-col-title">급등 TOP5</div>
+        <ul class="rank-list" id="topGainers"><li class="loading-note">불러오는 중...</li></ul>
+      </div>
+      <div class="tool-card">
+        <div class="mega-col-title">급락 TOP5</div>
+        <ul class="rank-list" id="topLosers"><li class="loading-note">불러오는 중...</li></ul>
+      </div>
+    </div>
+
+    <h2 style="font-size: 17px; margin: 40px 0 16px;">DeFi TVL (예치자산총액)</h2>
+    <div class="stat-grid" style="grid-template-columns: repeat(3, 1fr);" id="tvlStats">
+      <div><div class="stat-label">현재 TVL</div><div class="stat-value" id="tvlNow">-</div></div>
+      <div><div class="stat-label">24시간 변동</div><div class="stat-value" id="tvl24h">-</div></div>
+      <div><div class="stat-label">7일 변동</div><div class="stat-value" id="tvl7d">-</div></div>
+    </div>
+    <p style="font-size: 12px; color: var(--text-muted); margin-top: 10px;">출처: DeFiLlama</p>
+
+    <h2 style="font-size: 17px; margin: 40px 0 16px;">스테이블코인(USDT · USDC) 발행량 추이</h2>
+    <p class="disclaimer" style="background: var(--accent-soft); color: var(--accent);">지갑 간 실시간 이동(온체인 송금) 추적은 무료 API로는 제공되지 않아요. 대신 "전체 발행량(시가총액)이 늘고 있는지 줄고 있는지"로 자금 유입·유출 신호를 대신 보여드려요 — 발행량 증가는 보통 코인시장으로 자금이 들어오고 있다는 신호로 해석돼요.</p>
+    <div class="stat-grid" style="grid-template-columns: repeat(2, 1fr);" id="stableStats">
+      <div><div class="stat-label">USDT 시가총액</div><div class="stat-value" id="usdtCap">-</div><div class="rank-change" id="usdtChg" style="margin-top:6px; font-size:13px;"></div></div>
+      <div><div class="stat-label">USDC 시가총액</div><div class="stat-value" id="usdcCap">-</div><div class="rank-change" id="usdcChg" style="margin-top:6px; font-size:13px;"></div></div>
+    </div>
+  </div>
+</section>
+
+<footer class="pagefoot">
+  <span>sloworld</span>
+  <span><a href="/sitemap.html">사이트맵</a> · <a href="/privacy.html">개인정보처리방침</a></span>
+</footer>
+
+<script src="/assets/nav.js" defer></script>
+<script src="/assets/crypto-market.js" defer></script>
+</body>
+</html>
