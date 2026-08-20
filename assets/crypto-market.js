@@ -25,13 +25,14 @@
   });
 
   // ---- interactive per-coin price charts with clickable time ranges ----
+  // CoinGecko's free tier (even with a demo key) 401s on days=max, so the
+  // longest range offered here is 1 year.
   var RANGES = [
     { label: '24시간', days: '1' },
     { label: '7일', days: '7' },
     { label: '30일', days: '30' },
     { label: '3개월', days: '90' },
-    { label: '1년', days: '365' },
-    { label: '전체', days: 'max' }
+    { label: '1년', days: '365' }
   ];
 
   // calls CoinGecko directly from the browser. a Worker-side proxy was
@@ -344,7 +345,27 @@
       document.getElementById('topLosers').innerHTML = '<li class="loading-note">불러오지 못했어요</li>';
     });
 
-  // ---- DeFi TVL (DeFiLlama) — stat tiles + 90-day trend chart ----
+  // builds a range-tab row inside an existing container and wires clicks
+  // to onSelect(days) — shared by the TVL and stablecoin charts below.
+  function buildRangeTabs(container, onSelect) {
+    if (!container) return null;
+    container.innerHTML = RANGES.map(function (r, i) {
+      return '<button type="button" class="range-tab' + (i === 0 ? ' active' : '') + '" data-days="' + r.days + '">' + r.label + '</button>';
+    }).join('');
+    container.addEventListener('click', function (e) {
+      var btn = e.target.closest('.range-tab');
+      if (!btn) return;
+      container.querySelectorAll('.range-tab').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      onSelect(btn.getAttribute('data-days'));
+    });
+    return container;
+  }
+
+  // ---- DeFi TVL (DeFiLlama) — stat tiles + trend chart with range tabs ----
+  // DeFiLlama's endpoint returns the full history in one call, so switching
+  // ranges just re-slices data already in memory — no re-fetching needed.
+  var DAYS_PER_RANGE = { '1': 2, '7': 7, '30': 30, '90': 90, '365': 365 };
   fetch('https://api.llama.fi/v2/historicalChainTvl')
     .then(function (r) { return r.json(); })
     .then(function (data) {
@@ -359,15 +380,20 @@
       document.getElementById('tvl24h').innerHTML = pctSpan(((last - day) / day) * 100);
       document.getElementById('tvl7d').innerHTML = pctSpan(((last - week) / week) * 100);
 
-      var recent = data.slice(-90).map(function (d) { return [d.date * 1000, d.tvl]; });
       var tvlCanvas = document.getElementById('tvlChart');
-      if (tvlCanvas) drawCoinChart(tvlCanvas, recent, [], fmtUsd);
+      function drawRange(days) {
+        var n2 = DAYS_PER_RANGE[days] || 90;
+        var recent = data.slice(-n2).map(function (d) { return [d.date * 1000, d.tvl]; });
+        if (tvlCanvas) drawCoinChart(tvlCanvas, recent, [], fmtUsd);
+      }
+      buildRangeTabs(document.getElementById('tvlTabs'), drawRange);
+      drawRange('90');
     })
     .catch(function () {
       ['tvlNow', 'tvl24h', 'tvl7d'].forEach(function (id) { document.getElementById(id).textContent = '불러오지 못함'; });
     });
 
-  // ---- stablecoin market caps (proxy for USDT/USDC flow) — stats + 90-day chart ----
+  // ---- stablecoin market caps (proxy for USDT/USDC flow) — stats + chart with range tabs ----
   queueFetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&ids=tether,usd-coin'))
     .then(function (coins) {
       krwRatePromise.then(function (rate) {
@@ -386,21 +412,29 @@
       document.getElementById('usdcCap').textContent = '불러오지 못함';
     });
 
-  function drawStablecoinChart(coinId, canvasId, statusId) {
+  function buildStablecoinChart(coinId, canvasId, statusId, tabsId) {
     var canvas = document.getElementById(canvasId);
     var statusEl = document.getElementById(statusId);
     if (!canvas) return;
-    queueFetch(cgUrl('/api/v3/coins/' + coinId + '/market_chart?vs_currency=usd&days=90'))
-      .then(function (data) {
-        var caps = (data.market_caps || []);
-        if (!caps.length) throw new Error('no data');
-        drawCoinChart(canvas, caps, [], fmtUsd);
-        if (statusEl) statusEl.textContent = '';
-      })
-      .catch(function () {
-        if (statusEl) statusEl.textContent = '차트를 불러오지 못했어요. 잠시 후 새로고침해주세요.';
-      });
+    var byRange = {};
+
+    function load(days) {
+      if (byRange[days]) { drawCoinChart(canvas, byRange[days], [], fmtUsd); if (statusEl) statusEl.textContent = ''; return; }
+      queueFetch(cgUrl('/api/v3/coins/' + coinId + '/market_chart?vs_currency=usd&days=' + days))
+        .then(function (data) {
+          var caps = (data.market_caps || []);
+          if (!caps.length) throw new Error('no data');
+          byRange[days] = caps;
+          drawCoinChart(canvas, caps, [], fmtUsd);
+          if (statusEl) statusEl.textContent = '';
+        })
+        .catch(function () {
+          if (statusEl) statusEl.textContent = '차트를 불러오지 못했어요. 잠시 후 다시 눌러주세요.';
+        });
+    }
+    buildRangeTabs(document.getElementById(tabsId), load);
+    load(RANGES[0].days);
   }
-  drawStablecoinChart('tether', 'usdtChart', 'usdtChartStatus');
-  drawStablecoinChart('usd-coin', 'usdcChart', 'usdcChartStatus');
+  buildStablecoinChart('tether', 'usdtChart', 'usdtChartStatus', 'usdtTabs');
+  buildStablecoinChart('usd-coin', 'usdcChart', 'usdcChartStatus', 'usdcTabs');
 })();
