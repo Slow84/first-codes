@@ -111,21 +111,48 @@ if (container && window.WebGLRenderingContext) {
   const funnel = new THREE.LineSegments(funnelGeo, funnelMat);
   funnelGroup.add(funnel);
 
-  // ---- countless background stars, static ----
-  const STAR_COUNT = 700;
-  const starPos = new Float32Array(STAR_COUNT * 3);
+  // ---- dense star field that flows into the hole along with the funnel
+  // rings, using the same phase-shifted-t trick: each star has a random
+  // depth offset and drifts inward, shrinking toward the vanishing point
+  // and fading in/out exactly like the rings, then loops. parented to
+  // funnelGroup so it shares the exact same off-center placement. ----
+  const STAR_COUNT = 1800;
+  const STAR_R0 = 15;
+  const STAR_POWER = 1.3;
+  const STAR_DEPTH = DEPTH * 1.4;
+  const starT0 = new Float32Array(STAR_COUNT);
+  const starAngle = new Float32Array(STAR_COUNT);
+  const starR0 = new Float32Array(STAR_COUNT);
+  const starTwinkle = new Float32Array(STAR_COUNT);
   for (let i = 0; i < STAR_COUNT; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = 1 + Math.random() * 10;
-    starPos[i * 3] = Math.cos(angle) * r;
-    starPos[i * 3 + 1] = Math.sin(angle) * r;
-    starPos[i * 3 + 2] = -Math.random() * DEPTH * 1.3;
+    starT0[i] = Math.random();
+    starAngle[i] = Math.random() * Math.PI * 2;
+    starR0[i] = 0.4 + Math.random() * STAR_R0;
+    starTwinkle[i] = 0.4 + Math.random() * 0.6;
   }
+  const starPos = new Float32Array(STAR_COUNT * 3);
+  const starColors = new Float32Array(STAR_COUNT * 3);
+
+  function writeStars(phase) {
+    for (let i = 0; i < STAR_COUNT; i++) {
+      const t = (starT0[i] + phase * 0.6) % 1; // slightly slower than the rings, for parallax
+      const r = Math.max(0.05, starR0[i] * Math.pow(1 - t, STAR_POWER));
+      const y = t * STAR_DEPTH;
+      starPos[i * 3] = Math.cos(starAngle[i]) * r;
+      starPos[i * 3 + 1] = Math.sin(starAngle[i]) * r;
+      starPos[i * 3 + 2] = -y;
+      const b = brightnessAt(Math.min(t, 0.99)) * starTwinkle[i];
+      starColors[i * 3] = b; starColors[i * 3 + 1] = b; starColors[i * 3 + 2] = b;
+    }
+  }
+  writeStars(0);
+
   const starGeo = new THREE.BufferGeometry();
   starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.024, transparent: true, opacity: 0.75, fog: true });
+  starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+  const starMat = new THREE.PointsMaterial({ vertexColors: true, size: 0.05, transparent: true, opacity: 0.85, fog: true });
   const stars = new THREE.Points(starGeo, starMat);
-  scene.add(stars);
+  funnelGroup.add(stars);
 
   fitRenderer();
   window.addEventListener('resize', fitRenderer);
@@ -144,6 +171,10 @@ if (container && window.WebGLRenderingContext) {
     writeFunnel(phase);
     funnelGeo.attributes.position.needsUpdate = true;
     funnelGeo.attributes.color.needsUpdate = true;
+
+    writeStars(phase);
+    starGeo.attributes.position.needsUpdate = true;
+    starGeo.attributes.color.needsUpdate = true;
 
     renderer.render(scene, camera);
   }
