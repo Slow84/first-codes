@@ -35,11 +35,11 @@
     <p style="font-size: 15px; color: var(--text-muted); max-width: 60ch; margin: 16px 0 0;">투자 조언이 아니라 참고용 시황 요약이에요. 차트와 수치는 각 데이터 제공처(TradingView, CoinGecko, DeFiLlama)에서 실시간으로 가져옵니다.</p>
 
     <h2 style="font-size: 17px; margin: 40px 0 16px;">주요 코인 차트</h2>
-    <div class="chart-grid">
-      <div class="chart-card"><h4>BTC / USDT</h4><div data-tv-symbol="BINANCE:BTCUSDT"></div></div>
-      <div class="chart-card"><h4>ETH / USDT</h4><div data-tv-symbol="BINANCE:ETHUSDT"></div></div>
-      <div class="chart-card"><h4>SOL / USDT</h4><div data-tv-symbol="BINANCE:SOLUSDT"></div></div>
-      <div class="chart-card"><h4>BNB / USDT</h4><div data-tv-symbol="BINANCE:BNBUSDT"></div></div>
+    <div class="chart-grid" id="coinCharts">
+      <div class="chart-card" data-coin-card="bitcoin"><h4>비트코인 (BTC)</h4></div>
+      <div class="chart-card" data-coin-card="ethereum"><h4>이더리움 (ETH)</h4></div>
+      <div class="chart-card" data-coin-card="solana"><h4>솔라나 (SOL)</h4></div>
+      <div class="chart-card" data-coin-card="binancecoin"><h4>바이낸스코인 (BNB)</h4></div>
     </div>
 
     <h2 style="font-size: 17px; margin: 40px 0 16px;">비트코인 도미넌스 · 코인 전체 시총 vs 증시</h2>

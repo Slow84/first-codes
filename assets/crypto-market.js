@@ -24,6 +24,159 @@
     el.appendChild(container);
   });
 
+  // ---- interactive per-coin price charts with clickable time ranges ----
+  var RANGES = [
+    { label: '24시간', days: '1' },
+    { label: '7일', days: '7' },
+    { label: '30일', days: '30' },
+    { label: '3개월', days: '90' },
+    { label: '1년', days: '365' },
+    { label: '전체', days: 'max' }
+  ];
+
+  function fmtKrw(v) {
+    if (v >= 1e8) return '₩' + (v / 1e8).toFixed(2) + '억';
+    if (v >= 1e4) return '₩' + Math.round(v / 1e4).toLocaleString() + '만';
+    return '₩' + Math.round(v).toLocaleString();
+  }
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function drawCoinChart(canvas, prices, volumes) {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (!prices.length) return;
+
+    var accent = cssVar('--accent') || '#4338CA';
+    var border = cssVar('--border') || '#E7E7E4';
+    var muted = cssVar('--text-muted') || '#6B6D70';
+
+    var priceH = h * 0.76;
+    var volTop = priceH + 12;
+    var volH = h - volTop;
+
+    var vals = prices.map(function (p) { return p[1]; });
+    var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    var pad = (max - min) * 0.1 || max * 0.02;
+    var yMin = min - pad, yMax = max + pad;
+
+    function xAt(i) { return prices.length > 1 ? (i / (prices.length - 1)) * w : 0; }
+    function yAt(v) { return priceH - ((v - yMin) / (yMax - yMin)) * priceH; }
+
+    // gridlines + price labels
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.font = '10.5px Inter, sans-serif';
+    ctx.fillStyle = muted;
+    ctx.textAlign = 'right';
+    for (var g = 0; g <= 3; g++) {
+      var v = yMin + (yMax - yMin) * (g / 3);
+      var y = yAt(v);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.fillText(fmtKrw(v), w - 4, y - 4);
+    }
+
+    // area fill
+    var grad = ctx.createLinearGradient(0, 0, 0, priceH);
+    grad.addColorStop(0, accent + '59');
+    grad.addColorStop(1, accent + '00');
+    ctx.beginPath();
+    prices.forEach(function (p, i) {
+      var x = xAt(i), y = yAt(p[1]);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.lineTo(w, priceH); ctx.lineTo(0, priceH); ctx.closePath();
+    ctx.fillStyle = grad; ctx.fill();
+
+    // line
+    ctx.beginPath();
+    prices.forEach(function (p, i) {
+      var x = xAt(i), y = yAt(p[1]);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    // volume bars
+    if (volumes && volumes.length) {
+      var volVals = volumes.map(function (v) { return v[1]; });
+      var volMax = Math.max.apply(null, volVals) || 1;
+      ctx.fillStyle = accent + '33';
+      var bw = Math.max(1, (w / volumes.length) * 0.7);
+      volumes.forEach(function (v, i) {
+        var x = prices.length > 1 ? (i / (volumes.length - 1)) * w : 0;
+        var bh = (v[1] / volMax) * volH;
+        ctx.fillRect(x - bw / 2, volTop + (volH - bh), bw, bh);
+      });
+    }
+  }
+
+  function buildCoinChart(card, coinId) {
+    var tabsHtml = RANGES.map(function (r, i) {
+      return '<button type="button" class="range-tab' + (i === 0 ? ' active' : '') + '" data-days="' + r.days + '">' + r.label + '</button>';
+    }).join('');
+    card.insertAdjacentHTML('beforeend',
+      '<div class="range-tabs">' + tabsHtml + '</div>' +
+      '<div class="coin-price-now">불러오는 중...</div>' +
+      '<canvas class="price-canvas"></canvas>'
+    );
+
+    var tabsEl = card.querySelector('.range-tabs');
+    var priceEl = card.querySelector('.coin-price-now');
+    var canvas = card.querySelector('.price-canvas');
+    var cache = { prices: [], volumes: [] };
+
+    function redraw() { drawCoinChart(canvas, cache.prices, cache.volumes); }
+
+    function load(days) {
+      fetch('https://api.coingecko.com/api/v3/coins/' + coinId + '/market_chart?vs_currency=krw&days=' + days)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          cache.prices = data.prices || [];
+          cache.volumes = data.total_volumes || [];
+          redraw();
+          if (cache.prices.length) {
+            var last = cache.prices[cache.prices.length - 1][1];
+            var first = cache.prices[0][1];
+            var chg = ((last - first) / first) * 100;
+            var cls = chg >= 0 ? 'up' : 'down';
+            var sign = chg >= 0 ? '+' : '';
+            priceEl.innerHTML = fmtKrw(last) + '<span class="chg ' + cls + '">' + sign + chg.toFixed(2) + '%</span>';
+          }
+        })
+        .catch(function () { priceEl.textContent = '불러오지 못했어요'; });
+    }
+
+    tabsEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('.range-tab');
+      if (!btn) return;
+      tabsEl.querySelectorAll('.range-tab').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      load(btn.getAttribute('data-days'));
+    });
+
+    load(RANGES[0].days);
+
+    // redraw from cached data on resize — refetching per resize tick would spam the API
+    var resizeTimer;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(redraw, 150);
+    });
+  }
+
+  document.querySelectorAll('[data-coin-card]').forEach(function (card) {
+    buildCoinChart(card, card.getAttribute('data-coin-card'));
+  });
+
   function escapeHtml(s) {
     var div = document.createElement('div');
     div.textContent = s;
