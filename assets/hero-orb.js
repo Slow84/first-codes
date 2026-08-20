@@ -135,7 +135,7 @@ if (container && window.WebGLRenderingContext) {
 
   function writeStars(phase) {
     for (let i = 0; i < STAR_COUNT; i++) {
-      const t = (starT0[i] + phase * 0.6) % 1; // slightly slower than the rings, for parallax
+      const t = (starT0[i] + phase) % 1; // same speed as the funnel rings
       const r = Math.max(0.05, starR0[i] * Math.pow(1 - t, STAR_POWER));
       const y = t * STAR_DEPTH;
       starPos[i * 3] = Math.cos(starAngle[i]) * r;
@@ -208,7 +208,7 @@ if (container && window.WebGLRenderingContext) {
 
     // slow, continuous inward flow — camera/composition never move, only
     // the rings crawl from the mouth toward the vanishing point and loop
-    phase = (phase + 0.018 * dt) % 1;
+    phase = (phase + 0.011 * dt) % 1;
     writeFunnel(phase);
     funnelGeo.attributes.position.needsUpdate = true;
     funnelGeo.attributes.color.needsUpdate = true;
