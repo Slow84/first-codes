@@ -122,7 +122,10 @@ async function fetchTrending(region, key) {
 
 async function fetchRecentPopular(region, days, key) {
   const publishedAfter = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  const searchUrl = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=viewCount&regionCode=' +
+  // YouTube's search.list quietly returns zero results when there's no q=
+  // term at all, even with other filters set — q=%20 (a blank space) works
+  // around this without actually biasing results toward a real keyword.
+  const searchUrl = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=viewCount&q=%20&regionCode=' +
     region + '&publishedAfter=' + publishedAfter + '&maxResults=10&key=' + key;
   const sr = await fetch(searchUrl);
   const sdata = await sr.json();
