@@ -618,7 +618,12 @@
   var tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
   var TVL_BUBBLE_MAX_SCALE = 6;
   var tvlBubbleRange = '1d'; // '1d' or '7d' — which change field drives the volatility color
-  var TVL_BUBBLE_VOL_CAP = 25; // % change treated as "maximally volatile" for color purposes
+  // "maximally volatile" % change for color purposes — separate caps because
+  // day-over-day and week-over-week moves are on completely different
+  // scales (checked against real data: change_1d p90 ≈ 8%, change_7d
+  // p90 ≈ 28%). Using one shared cap made the daily tab look almost
+  // uniformly green since even the biggest daily mover barely crossed it.
+  var TVL_BUBBLE_VOL_CAP = { '1d': 9, '7d': 25 };
 
   // Fisher-Yates — packing in size order always puts the biggest protocol
   // dead center with everything else ranked outward, which reads as
@@ -659,7 +664,7 @@
     // switching ranges is then just a redraw, not a re-layout.
     var items = list.map(function (p) {
       return {
-        name: p.name, tvl: p.tvl, slug: p.slug, change_1d: p.change_1d, change_7d: p.change_7d,
+        name: p.name, tvl: p.tvl, slug: p.slug, symbol: p.symbol, change_1d: p.change_1d, change_7d: p.change_7d,
         r: Math.max(minR, k * Math.sqrt(p.tvl)),
         sizeT: (Math.log(p.tvl || 1) - logMin) / logRange
       };
@@ -718,7 +723,7 @@
       // signals, one color, decoded at a glance: pale+green = small & calm,
       // deep+red = big & volatile.
       var changeVal = tvlBubbleRange === '7d' ? (it.change_7d || 0) : (it.change_1d || 0);
-      var volT = Math.min(1, Math.abs(changeVal) / TVL_BUBBLE_VOL_CAP);
+      var volT = Math.min(1, Math.abs(changeVal) / TVL_BUBBLE_VOL_CAP[tvlBubbleRange]);
       var hue = 150 - 150 * volT;
       var lightness = (isDark ? 62 : 82) - (isDark ? 30 : 45) * it.sizeT;
       var saturation = 35 + 35 * it.sizeT;
@@ -737,6 +742,7 @@
       // between adjacent labeled circles once many are visible at once.
       if (it.r * tvlBubbleView.scale < 26) return;
       ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle'; // so fillText's y is each line's own visual center, not its alphabetic baseline — makes symmetric stacking around it.y exact instead of approximate
       ctx.fillStyle = isDark ? '#fff' : '#18181b';
       // no artificial floor — font tracks circle size directly, so a small
       // circle's text starts small too (readable only once zoomed in
@@ -744,13 +750,18 @@
       // circle much smaller than the floor was designed for.
       var nameFont = Math.min(13, it.r / 3.4);
       ctx.font = '700 ' + nameFont + 'px Inter, sans-serif';
+      // ticker (e.g. "LDO") instead of full name — much shorter, so it
+      // actually fits small circles instead of truncating almost
+      // everything to 2-3 letters + "…". Protocols with no token of their
+      // own (bridges, custody wrappers) have no symbol in DeFiLlama's data,
+      // so fall back to the name for those.
+      var label = (it.symbol && it.symbol !== '-') ? it.symbol.toUpperCase() : it.name;
       // truncate by measured width, not a fixed character count — a wide
-      // name like "Binance staked ETH" needs cutting off much sooner than
-      // a narrow one like "WBTC" does at the same circle size. Kept tighter
-      // than the circle's full width so adjacent (touching) circles' labels
-      // don't bleed into each other.
+      // name like "Binance staked ETH" (used as a fallback above) needs
+      // cutting off much sooner than a short ticker does at the same
+      // circle size. Kept tighter than the circle's full width so adjacent
+      // (touching) circles' labels don't bleed into each other.
       var maxTextWidth = it.r * 1.4;
-      var label = it.name;
       if (ctx.measureText(label).width > maxTextWidth) {
         while (label.length > 1 && ctx.measureText(label + '…').width > maxTextWidth) {
           label = label.slice(0, -1);
@@ -760,11 +771,14 @@
       // show the $ amount under the name at any label-worthy size (not just
       // large circles) — sized down with the circle so it still fits.
       var valueFont = Math.min(11, it.r / 4.6);
-      var lineGap = Math.max(8, nameFont * 0.85);
-      ctx.fillText(label, it.x, it.y - lineGap / 2 + 2);
+      // no floor and no arbitrary offset here either — gap is purely each
+      // line's own half-height plus a hair of breathing room, so the pair
+      // stays tight and perfectly centered on it.y at any circle size.
+      var lineGap = nameFont * 0.5 + valueFont * 0.5 + 1;
+      ctx.fillText(label, it.x, it.y - lineGap / 2);
       ctx.font = '600 ' + valueFont + 'px Inter, sans-serif';
       ctx.fillStyle = isDark ? 'rgba(244,244,245,0.75)' : 'rgba(24,24,27,0.65)';
-      ctx.fillText(fmtUsd(it.tvl), it.x, it.y + lineGap / 2 + 2);
+      ctx.fillText(fmtUsd(it.tvl), it.x, it.y + lineGap / 2);
     });
   }
 
