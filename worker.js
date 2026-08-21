@@ -163,6 +163,83 @@ async function handleYoutube(env, url) {
   return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 }
 
+// Crypto news — pulls RSS from CoinDesk and Cointelegraph server-side (both
+// require no API key, but a browser fetch would hit CORS, so it's proxied
+// here). RSS is simple enough that a small regex parser is easier than
+// shipping an XML library into a Worker.
+const NEWS_FEEDS = [
+  { url: 'https://www.coindesk.com/arc/outboundfeeds/rss', source: 'CoinDesk' },
+  { url: 'https://cointelegraph.com/rss', source: 'Cointelegraph' }
+];
+
+function xmlTag(block, tag) {
+  const m = block.match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>'));
+  return m ? m[1] : '';
+}
+
+function xmlAttr(block, tag, attr) {
+  const m = block.match(new RegExp('<' + tag + '[^>]*\\s' + attr + '="([^"]*)"'));
+  return m ? m[1] : null;
+}
+
+function decodeXmlEntities(s) {
+  return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'");
+}
+
+function cleanXmlText(s) {
+  const cdata = s.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
+  let out = cdata ? cdata[1] : s;
+  out = out.replace(/<[^>]+>/g, '').trim();
+  return decodeXmlEntities(out);
+}
+
+function parseRss(xml, source) {
+  const items = [];
+  const itemRe = /<item[\s\S]*?<\/item>/g;
+  let m;
+  while ((m = itemRe.exec(xml))) {
+    const block = m[0];
+    const title = cleanXmlText(xmlTag(block, 'title'));
+    const link = cleanXmlText(xmlTag(block, 'link')).split('?')[0];
+    const pubDate = xmlTag(block, 'pubDate').trim();
+    if (!title || !link || !pubDate) continue;
+    let image = xmlAttr(block, 'media:content', 'url') || xmlAttr(block, 'enclosure', 'url');
+    if (!image) {
+      const desc = xmlTag(block, 'description');
+      const imgMatch = desc.match(/<img[^>]+src="([^"]+)"/);
+      if (imgMatch) image = imgMatch[1];
+    }
+    items.push({ title: title, link: link, pubDate: pubDate, source: source, image: image ? decodeXmlEntities(image) : null });
+  }
+  return items;
+}
+
+async function handleNews(env) {
+  const cacheKey = 'news:v1';
+  const cached = await env.DATA.get(cacheKey);
+  if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+
+  const results = await Promise.allSettled(NEWS_FEEDS.map(function (feed) {
+    return fetch(feed.url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; sloworldbot/1.0)' } })
+      .then(function (r) { return r.text(); })
+      .then(function (xml) { return parseRss(xml, feed.source); });
+  }));
+
+  let items = [];
+  results.forEach(function (res) {
+    if (res.status === 'fulfilled') items = items.concat(res.value);
+  });
+  if (!items.length) return json({ error: '뉴스를 가져오지 못했어요.' }, 502);
+
+  items.sort(function (a, b) { return new Date(b.pubDate) - new Date(a.pubDate); });
+  items = items.slice(0, 40);
+
+  const text = JSON.stringify({ items: items });
+  await env.DATA.put(cacheKey, text, { expirationTtl: 60 * 20 }); // 20 min — RSS itself updates hourly
+  return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -181,6 +258,11 @@ export default {
 
     if (url.pathname === '/api/yt') {
       if (request.method === 'GET') return handleYoutube(env, url);
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    if (url.pathname === '/api/news') {
+      if (request.method === 'GET') return handleNews(env);
       return new Response('Method not allowed', { status: 405 });
     }
 
