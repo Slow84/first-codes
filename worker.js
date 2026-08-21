@@ -126,7 +126,7 @@ async function fetchTrending(region, key) {
 // globally-viral clips). relevanceLanguage is a much stronger signal since
 // it biases ranking toward that language's content; mapped per-region here
 // so only regions we have a language guess for get the extra bias.
-const REGION_LANGUAGE = { KR: 'ko' };
+const REGION_LANGUAGE = { KR: 'ko', US: 'en' };
 
 async function fetchRecentPopular(region, days, key) {
   const publishedAfter = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -134,7 +134,12 @@ async function fetchRecentPopular(region, days, key) {
   // term at all, even with other filters set — q=%20 (a blank space) works
   // around this without actually biasing results toward a real keyword.
   const relevanceLanguage = REGION_LANGUAGE[region];
-  const searchUrl = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=viewCount&q=%20&regionCode=' +
+  // Shorts go hyper-viral the same way in every country regardless of
+  // language/region, which is what was drowning out real per-country
+  // differences (KR and US were returning nearly identical clips).
+  // videoDuration=medium (4-20 min) excludes Shorts and gets genuinely
+  // distinct, region-appropriate results — confirmed via direct API test.
+  const searchUrl = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=viewCount&q=%20&videoDuration=medium&regionCode=' +
     region + (relevanceLanguage ? '&relevanceLanguage=' + relevanceLanguage : '') +
     '&publishedAfter=' + publishedAfter + '&maxResults=10&key=' + key;
   const sr = await fetch(searchUrl);
@@ -155,7 +160,7 @@ async function handleYoutube(env, url) {
 
   const region = (url.searchParams.get('region') || 'KR').toUpperCase().slice(0, 2);
   const range = url.searchParams.get('range') || 'today';
-  const cacheKey = 'yt:v2:' + region + ':' + range; // v2: relevanceLanguage fix invalidates old cached results
+  const cacheKey = 'yt:v3:' + region + ':' + range; // v3: exclude Shorts (videoDuration=medium) invalidates old cached results
 
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
