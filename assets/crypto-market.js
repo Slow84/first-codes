@@ -82,6 +82,12 @@
     return (neg ? '-$' : '$') + s;
   }
 
+  // same as fmtUsd but always shows a sign — for a delta amount, "$120M"
+  // reads ambiguous (grew or shrank by that much?) while "+$120M" doesn't.
+  function fmtUsdSigned(n) {
+    return (n >= 0 ? '+' : '') + fmtUsd(n);
+  }
+
   // for a single unit price (not an aggregate like market cap), not B/M-abbreviated
   function fmtUsdPrice(n) {
     var digits = n < 1 ? 4 : 2;
@@ -806,8 +812,12 @@
         }
         label += '…';
       }
-      // show the $ amount under the name at any label-worthy size (not just
-      // large circles) — sized down with the circle so it still fits.
+      // show how much TVL actually moved over the selected period (not the
+      // static current total, which never changed when switching 일/주 and
+      // made the tab feel like it only recolored things) — derived from
+      // the % change DeFiLlama gives us: previous = current/(1+change/100),
+      // delta = current - previous.
+      var deltaAmount = changeVal ? it.tvl * changeVal / (100 + changeVal) : 0;
       var valueFont = Math.min(11, it.r / 4.6);
       // no floor and no arbitrary offset here either — gap is purely each
       // line's own half-height plus a hair of breathing room, so the pair
@@ -815,8 +825,10 @@
       var lineGap = nameFont * 0.5 + valueFont * 0.5 + 1;
       ctx.fillText(label, it.x, it.y - lineGap / 2);
       ctx.font = '600 ' + valueFont + 'px Inter, sans-serif';
-      ctx.fillStyle = isDark ? 'rgba(244,244,245,0.75)' : 'rgba(24,24,27,0.65)';
-      ctx.fillText(fmtUsd(it.tvl), it.x, it.y + lineGap / 2);
+      // direction (grew/shrank) shown via text color here, separate from
+      // the circle's own hue (which encodes |change| magnitude, not sign)
+      ctx.fillStyle = deltaAmount >= 0 ? (cssVar('--good') || '#1F7A4C') : (cssVar('--warn') || '#B23A2E');
+      ctx.fillText(fmtUsdSigned(deltaAmount), it.x, it.y + lineGap / 2);
     });
   }
 
