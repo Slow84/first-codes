@@ -78,15 +78,31 @@
     switch (key) {
       case 'name': return (c.name || '').toLowerCase();
       case 'current_price': return c.current_price || 0;
+      case 'price_change_percentage_24h': return c.price_change_percentage_24h || 0;
       case 'market_cap': return c.market_cap || 0;
       case 'market_cap_rank': return c.market_cap_rank || 0;
       case 'ath_change_percentage': return c.ath_change_percentage || 0;
+      // undated coins sort last regardless of direction — a missing launch
+      // date isn't meaningfully "oldest" or "newest"
+      case 'genesis_date': return c.genesis_date ? new Date(c.genesis_date).getTime() : (sortDir === 1 ? Infinity : -Infinity);
       case 'total_volume': return c.total_volume || 0;
       case 'exchanges': return c.exchanges == null ? -1 : c.exchanges;
       case 'devScore': return c.devScore == null ? -1 : c.devScore;
       case 'communityScore': return c.communityScore == null ? -1 : c.communityScore;
       default: return 0;
     }
+  }
+
+  function fmtPct24h(n) {
+    if (n == null) return '-';
+    var cls = n >= 0 ? 'up' : 'down';
+    var sign = n >= 0 ? '+' : '';
+    return '<span class="rank-change ' + cls + '">' + sign + n.toFixed(1) + '%</span>';
+  }
+
+  function fmtGenesisDate(s) {
+    if (!s) return '<span class="cell-muted">정보없음</span>';
+    return s;
   }
 
   function renderRow(c) {
@@ -96,9 +112,11 @@
         '<strong>' + escapeHtml(c.name) + '</strong><span>' + escapeHtml(c.symbol.toUpperCase()) + '</span>' +
       '</a></td>' +
       '<td>' + fmtUsdPrice(c.current_price) + '</td>' +
+      '<td>' + fmtPct24h(c.price_change_percentage_24h) + '</td>' +
       '<td>' + fmtUsdAgg(c.market_cap) + '</td>' +
       '<td>#' + (c.market_cap_rank || '-') + '</td>' +
       '<td class="cell-warn">' + (c.ath_change_percentage != null ? c.ath_change_percentage.toFixed(1) + '%' : '-') + '</td>' +
+      '<td>' + fmtGenesisDate(c.genesis_date) + '</td>' +
       '<td>' + fmtUsdAgg(c.total_volume) + '</td>' +
       '<td class="cell-muted">' + (c.exchanges != null ? c.exchanges : '준비중') + '</td>' +
       '<td>' + (c.devScore != null ? fmtNum(c.devScore) : '<span class="cell-muted">불러오는 중</span>') + '</td>' +
@@ -144,8 +162,9 @@
           var com = detail.community_data || {};
           c.devScore = dev.stars != null ? dev.stars : 0;
           c.communityScore = (com.twitter_followers || 0) + (com.telegram_channel_user_count || 0) + (com.reddit_subscribers || 0);
+          c.genesis_date = detail.genesis_date || null;
         })
-        .catch(function () { c.devScore = 0; c.communityScore = 0; });
+        .catch(function () { c.devScore = 0; c.communityScore = 0; c.genesis_date = null; });
     }, function () { render(); }, function () {});
   }
 
@@ -178,6 +197,7 @@
         c.exchanges = null;
         c.devScore = null;
         c.communityScore = null;
+        c.genesis_date = null;
         return c;
       });
 
