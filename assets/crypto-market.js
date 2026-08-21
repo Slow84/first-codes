@@ -25,6 +25,8 @@
       timezone: 'Asia/Seoul',
       withdateranges: true,
       hide_side_toolbar: true,
+      hide_top_toolbar: true,
+      hide_legend: true,
       allow_symbol_change: false
     });
     container.appendChild(script);
@@ -232,12 +234,12 @@
       tip.style.display = 'none';
     }
 
-    canvas.addEventListener('mousemove', function (e) {
+    function updateAt(clientX) {
       var d = dataFn();
       var prices = d.prices || [];
       if (prices.length < 2) return;
       var rect = canvas.getBoundingClientRect();
-      var x = e.clientX - rect.left;
+      var x = clientX - rect.left;
       var idx = Math.round((x / rect.width) * (prices.length - 1));
       idx = Math.max(0, Math.min(prices.length - 1, idx));
       drawCoinChart(canvas, prices, d.volumes || [], fmtFn, idx);
@@ -253,8 +255,25 @@
       var tipX = (idx / (prices.length - 1)) * rect.width;
       tip.style.left = Math.min(Math.max(tipX, 55), rect.width - 55) + 'px';
       tip.style.top = canvas.offsetTop + 6 + 'px';
-    });
+    }
+
+    canvas.addEventListener('mousemove', function (e) { updateAt(e.clientX); });
     canvas.addEventListener('mouseleave', hide);
+
+    // touch: drag a finger across the chart to move the crosshair, same as
+    // mouse hover. preventDefault while dragging so the page doesn't scroll
+    // out from under the finger.
+    canvas.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      updateAt(e.touches[0].clientX);
+    }, { passive: true });
+    canvas.addEventListener('touchmove', function (e) {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      updateAt(e.touches[0].clientX);
+    }, { passive: false });
+    canvas.addEventListener('touchend', hide);
+    canvas.addEventListener('touchcancel', hide);
   }
 
   // CoinGecko's free tier blocks bursts of requests — this queue sends one
