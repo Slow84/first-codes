@@ -616,7 +616,12 @@
   var tvlBubbleItems = [];
   var tvlBubbleCanvasSize = { w: 0, h: 0 };
   var tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
-  var TVL_BUBBLE_MAX_SCALE = 6;
+  // computed per data load (see computeTvlBubbleLayout) so the biggest
+  // circle can never be zoomed past filling the canvas — a fixed constant
+  // here was the actual bug: at a flat 6x, the biggest protocol's circle
+  // ballooned to ~550px in a ~340px-tall canvas, swallowing the whole
+  // viewport and any neighboring circles with it.
+  var tvlBubbleMaxScale = 3.5;
   var tvlBubbleRange = '1d'; // '1d' or '7d' — which change field drives the volatility color
   // "maximally volatile" % change for color purposes — separate caps because
   // day-over-day and week-over-week moves are on completely different
@@ -711,6 +716,16 @@
       it.y = h / 2 + (it.y - bboxCy) * fitScale;
       it.r = it.r * fitScale;
     });
+
+    // derive the zoom ceiling from the actual biggest circle instead of a
+    // guessed constant — this is what a flat 6x got wrong: it never checked
+    // whether the *biggest* protocol's circle would still fit at max zoom,
+    // only whether the smallest one became legible. Capping so the biggest
+    // circle's diameter can't exceed ~92% of the canvas's short side means
+    // it can never swallow the whole viewport (and everything next to it)
+    // no matter how the TVL distribution shifts day to day.
+    var maxR = Math.max.apply(null, items.map(function (it) { return it.r; }));
+    tvlBubbleMaxScale = Math.max(1.5, Math.min(6, (Math.min(w, h) * 0.92) / (2 * maxR)));
     return items;
   }
 
@@ -823,7 +838,7 @@
   // valid offset range is just w*(1-scale)..0 (and the same for y).
   function clampTvlBubbleView() {
     var w = tvlBubbleCanvasSize.w, h = tvlBubbleCanvasSize.h;
-    var scale = Math.max(1, Math.min(TVL_BUBBLE_MAX_SCALE, tvlBubbleView.scale));
+    var scale = Math.max(1, Math.min(tvlBubbleMaxScale, tvlBubbleView.scale));
     tvlBubbleView.scale = scale;
     if (scale <= 1) { tvlBubbleView.ox = 0; tvlBubbleView.oy = 0; return; }
     tvlBubbleView.ox = Math.min(0, Math.max(w * (1 - scale), tvlBubbleView.ox));
@@ -831,7 +846,7 @@
   }
 
   function zoomTvlBubbleAt(screenX, screenY, factor) {
-    var newScale = Math.max(1, Math.min(TVL_BUBBLE_MAX_SCALE, tvlBubbleView.scale * factor));
+    var newScale = Math.max(1, Math.min(tvlBubbleMaxScale, tvlBubbleView.scale * factor));
     var actualFactor = newScale / tvlBubbleView.scale;
     tvlBubbleView.ox = screenX - (screenX - tvlBubbleView.ox) * actualFactor;
     tvlBubbleView.oy = screenY - (screenY - tvlBubbleView.oy) * actualFactor;
@@ -944,7 +959,7 @@
         renderTvlBubbleFrame();
       } else if (touchState.mode === 'pinch' && e.touches.length === 2) {
         var ratio = touchDist(e.touches) / touchState.dist;
-        var newScale = Math.max(1, Math.min(TVL_BUBBLE_MAX_SCALE, touchState.scale * ratio));
+        var newScale = Math.max(1, Math.min(tvlBubbleMaxScale, touchState.scale * ratio));
         var actualFactor = newScale / touchState.scale;
         tvlBubbleView.ox = touchState.midX - (touchState.midX - touchState.ox) * actualFactor;
         tvlBubbleView.oy = touchState.midY - (touchState.midY - touchState.oy) * actualFactor;
