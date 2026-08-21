@@ -591,7 +591,7 @@
     items.forEach(function (item, i) {
       if (i === 0) { item.x = cx; item.y = cy; placed.push(item); return; }
       var angle = 0, radius = 0, x = cx, y = cy, ok = false, tries = 0;
-      while (!ok && tries < 4000) {
+      while (!ok && tries < 9000) {
         angle += 0.32;
         radius += 0.55;
         x = cx + radius * Math.cos(angle);
@@ -618,6 +618,18 @@
   var tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
   var TVL_BUBBLE_MAX_SCALE = 6;
 
+  // Fisher-Yates — packing in size order always puts the biggest protocol
+  // dead center with everything else ranked outward, which reads as
+  // "sorted," not "a market." Shuffling the placement order (not the radii,
+  // those still come from tvl) scatters big and small circles throughout.
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+
   function computeTvlBubbleLayout(list, w, h) {
     // radius ∝ sqrt(tvl) so *area* (not radius) is proportional to TVL —
     // otherwise a 4x-bigger protocol would look 4x taller instead of 4x
@@ -627,11 +639,30 @@
     // the right ballpark so packing doesn't take forever.
     var totalTvl = list.reduce(function (s, p) { return s + (p.tvl || 0); }, 0);
     var k = Math.sqrt((0.5 * w * h) / (Math.PI * totalTvl));
-    var minR = 15;
+    var minR = 10;
+
+    // size color (green depth) and volatility color (red mix-in) each need
+    // to be relative to the *current dataset*, not an absolute scale, or
+    // one whale protocol would make everything else look identically pale.
+    // Size uses log scale since TVL spans orders of magnitude ($23B down to
+    // a few hundred M) — a linear scale would make everything past the top
+    // 2-3 protocols look the same pale shade.
+    var tvls = list.map(function (p) { return p.tvl || 1; });
+    var logMin = Math.log(Math.min.apply(null, tvls));
+    var logMax = Math.log(Math.max.apply(null, tvls));
+    var logRange = Math.max(1e-6, logMax - logMin);
+    var VOL_CAP = 25; // % change treated as "maximally volatile" for color purposes
+
     var items = list.map(function (p) {
-      return { name: p.name, tvl: p.tvl, change_1d: p.change_1d, r: Math.max(minR, k * Math.sqrt(p.tvl)) };
+      var vol = Math.max(Math.abs(p.change_1d || 0), Math.abs(p.change_7d || 0));
+      return {
+        name: p.name, tvl: p.tvl, slug: p.slug, change_1d: p.change_1d, change_7d: p.change_7d,
+        r: Math.max(minR, k * Math.sqrt(p.tvl)),
+        sizeT: (Math.log(p.tvl || 1) - logMin) / logRange,
+        volT: Math.min(1, vol / VOL_CAP)
+      };
     });
-    items.sort(function (a, b) { return b.r - a.r; });
+    shuffle(items);
     packCircles(items, w / 2, h / 2);
 
     // packing spreads outward in a roughly circular blob, but the canvas is
@@ -670,23 +701,30 @@
     // the circles, which is exactly what makes zooming in useful here.
     ctx.setTransform(dpr * tvlBubbleView.scale, 0, 0, dpr * tvlBubbleView.scale, dpr * tvlBubbleView.ox, dpr * tvlBubbleView.oy);
 
-    var good = cssVar('--good') || '#1F7A4C';
-    var warn = cssVar('--warn') || '#B23A2E';
     var isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
       (document.documentElement.getAttribute('data-theme') !== 'light' &&
         window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
     tvlBubbleItems.forEach(function (it) {
-      var up = (it.change_1d || 0) >= 0;
+      // hue runs green (150°, calm) -> red (0°, volatile) by how much the
+      // protocol's TVL moved recently; lightness runs pale -> deep by how
+      // big its TVL is. Two independent signals, one color, decoded at a
+      // glance: pale+green = small & calm, deep+red = big & volatile.
+      var hue = 150 - 150 * it.volT;
+      var lightness = (isDark ? 62 : 82) - (isDark ? 30 : 45) * it.sizeT;
+      var saturation = 35 + 35 * it.sizeT;
       ctx.beginPath();
       ctx.arc(it.x, it.y, it.r, 0, Math.PI * 2);
-      ctx.fillStyle = up ? good + '38' : warn + '38';
+      ctx.fillStyle = 'hsla(' + hue + ',' + saturation + '%,' + lightness + '%,0.7)';
       ctx.fill();
       ctx.lineWidth = 1.5 / tvlBubbleView.scale;
-      ctx.strokeStyle = up ? good : warn;
+      ctx.strokeStyle = 'hsl(' + hue + ',' + saturation + '%,' + Math.max(18, lightness - 20) + '%)';
       ctx.stroke();
 
-      if (it.r < 20) return;
+      // gate on the *apparent* (zoomed) size, not the raw world radius —
+      // otherwise a circle that's tiny in the base layout stays textless
+      // forever even after zooming in far enough to make it huge on screen.
+      if (it.r * tvlBubbleView.scale < 20) return;
       ctx.textAlign = 'center';
       ctx.fillStyle = isDark ? '#fff' : '#18181b';
       var nameFont = Math.max(9, Math.min(13, it.r / 3.2));
@@ -775,28 +813,42 @@
       tip.style.top = Math.max(screenY - 54, 4) + 'px';
     }
 
-    // ---- mouse: wheel to zoom, drag to pan, hover for tooltip ----
+    function openProtocolPage(hit) {
+      if (hit && hit.slug) window.open('https://defillama.com/protocol/' + hit.slug, '_blank', 'noopener');
+    }
+
+    // ---- mouse: wheel to zoom, drag to pan, hover for tooltip, click (no
+    // drag) opens the protocol's DeFiLlama page ----
     var mouseDrag = null;
     canvas.addEventListener('mousedown', function (e) {
-      mouseDrag = { x: e.clientX, y: e.clientY, ox: tvlBubbleView.ox, oy: tvlBubbleView.oy };
+      mouseDrag = { startX: e.clientX, startY: e.clientY, ox: tvlBubbleView.ox, oy: tvlBubbleView.oy };
       tip.style.display = 'none';
       canvas.style.cursor = 'grabbing';
     });
     window.addEventListener('mousemove', function (e) {
       if (!mouseDrag) return;
-      tvlBubbleView.ox = mouseDrag.ox + (e.clientX - mouseDrag.x);
-      tvlBubbleView.oy = mouseDrag.oy + (e.clientY - mouseDrag.y);
+      tvlBubbleView.ox = mouseDrag.ox + (e.clientX - mouseDrag.startX);
+      tvlBubbleView.oy = mouseDrag.oy + (e.clientY - mouseDrag.startY);
       clampTvlBubbleView();
       renderTvlBubbleFrame();
     });
-    window.addEventListener('mouseup', function () {
-      if (mouseDrag) { mouseDrag = null; canvas.style.cursor = tvlBubbleView.scale > 1 ? 'grab' : 'default'; }
+    window.addEventListener('mouseup', function (e) {
+      if (!mouseDrag) return;
+      var moved = Math.abs(e.clientX - mouseDrag.startX) + Math.abs(e.clientY - mouseDrag.startY);
+      if (moved < 6) {
+        var rect = canvas.getBoundingClientRect();
+        openProtocolPage(hitTest(e.clientX - rect.left, e.clientY - rect.top));
+      }
+      mouseDrag = null;
+      canvas.style.cursor = tvlBubbleView.scale > 1 ? 'grab' : 'default';
     });
     canvas.addEventListener('mousemove', function (e) {
       if (mouseDrag) return;
       var rect = canvas.getBoundingClientRect();
       var x = e.clientX - rect.left, y = e.clientY - rect.top;
-      showTip(hitTest(x, y), x, y, rect);
+      var hit = hitTest(x, y);
+      canvas.style.cursor = hit ? 'pointer' : (tvlBubbleView.scale > 1 ? 'grab' : 'default');
+      showTip(hit, x, y, rect);
     });
     canvas.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
     canvas.addEventListener('wheel', function (e) {
@@ -845,7 +897,17 @@
         renderTvlBubbleFrame();
       }
     }, { passive: false });
-    canvas.addEventListener('touchend', function () { touchState = null; });
+    canvas.addEventListener('touchend', function (e) {
+      if (touchState && touchState.mode === 'pan' && e.changedTouches.length === 1) {
+        var t = e.changedTouches[0];
+        var moved = Math.abs(t.clientX - touchState.x) + Math.abs(t.clientY - touchState.y);
+        if (moved < 8) {
+          var rect = canvas.getBoundingClientRect();
+          openProtocolPage(hitTest(t.clientX - rect.left, t.clientY - rect.top));
+        }
+      }
+      touchState = null;
+    });
     canvas.addEventListener('touchcancel', function () { touchState = null; });
 
     if (resetBtn) {
@@ -878,13 +940,15 @@
   fetch('https://api.llama.fi/protocols')
     .then(function (r) { return r.json(); })
     .then(function (protocols) {
-      tvlRankList = protocols
+      var sortedProtocols = protocols
         .filter(function (p) { return p.category !== 'CEX' && typeof p.tvl === 'number' && p.tvl > 0; })
-        .sort(function (a, b) { return b.tvl - a.tvl; })
-        .slice(0, 20);
+        .sort(function (a, b) { return b.tvl - a.tvl; });
+      // table stays short (top 20) for a quick-glance list; the bubble
+      // chart can hold far more since panning/zooming makes 100 usable.
+      tvlRankList = sortedProtocols.slice(0, 20);
       renderTvlRank(tvlRankList);
 
-      drawTvlBubbles(tvlRankList);
+      drawTvlBubbles(sortedProtocols.slice(0, 100));
       var tvlBubbleCanvas = document.getElementById('tvlBubbleChart');
       var tvlBubbleWrap = document.getElementById('tvlBubbleWrap');
       var tvlBubbleReset = document.getElementById('tvlBubbleReset');
