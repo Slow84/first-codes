@@ -583,6 +583,115 @@
     }
   }
 
+  // greedy spiral packing: places each circle (already sorted largest-first)
+  // as close to center as possible without overlapping ones placed before
+  // it — simple, no external layout library, plenty fast for ~20 circles.
+  function packCircles(items, cx, cy) {
+    var placed = [];
+    items.forEach(function (item, i) {
+      if (i === 0) { item.x = cx; item.y = cy; placed.push(item); return; }
+      var angle = 0, radius = 0, x = cx, y = cy, ok = false, tries = 0;
+      while (!ok && tries < 4000) {
+        angle += 0.32;
+        radius += 0.55;
+        x = cx + radius * Math.cos(angle);
+        y = cy + radius * Math.sin(angle);
+        ok = true;
+        for (var j = 0; j < placed.length; j++) {
+          var dx = x - placed[j].x, dy = y - placed[j].y;
+          if (Math.sqrt(dx * dx + dy * dy) < item.r + placed[j].r + 3) { ok = false; break; }
+        }
+        tries++;
+      }
+      item.x = x; item.y = y;
+      placed.push(item);
+    });
+    return items;
+  }
+
+  var tvlBubbleData = [];
+  function drawTvlBubbles(list) {
+    var canvas = document.getElementById('tvlBubbleChart');
+    if (!canvas || !list.length) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    // radius ∝ sqrt(tvl) so *area* (not radius) is proportional to TVL —
+    // otherwise a 4x-bigger protocol would look 4x taller instead of 4x
+    // more area, which reads as a much bigger exaggeration to the eye.
+    var totalTvl = list.reduce(function (s, p) { return s + (p.tvl || 0); }, 0);
+    var k = Math.sqrt((0.5 * w * h) / (Math.PI * totalTvl));
+    var minR = 15;
+    var items = list.map(function (p) {
+      return { name: p.name, tvl: p.tvl, change_1d: p.change_1d, r: Math.max(minR, k * Math.sqrt(p.tvl)) };
+    });
+    items.sort(function (a, b) { return b.r - a.r; });
+    packCircles(items, w / 2, h / 2);
+
+    var good = cssVar('--good') || '#1F7A4C';
+    var warn = cssVar('--warn') || '#B23A2E';
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+      (document.documentElement.getAttribute('data-theme') !== 'light' &&
+        window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+    items.forEach(function (it) {
+      var up = (it.change_1d || 0) >= 0;
+      ctx.beginPath();
+      ctx.arc(it.x, it.y, it.r, 0, Math.PI * 2);
+      ctx.fillStyle = up ? good + '38' : warn + '38';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = up ? good : warn;
+      ctx.stroke();
+
+      if (it.r > 26) {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = isDark ? '#fff' : '#18181b';
+        ctx.font = '700 ' + Math.min(13, it.r / 3.2) + 'px Inter, sans-serif';
+        var label = it.name.length > 12 ? it.name.slice(0, 11) + '…' : it.name;
+        ctx.fillText(label, it.x, it.y - (it.r > 40 ? 3 : 0));
+        if (it.r > 40) {
+          ctx.font = '600 11px Inter, sans-serif';
+          ctx.fillStyle = isDark ? 'rgba(244,244,245,0.75)' : 'rgba(24,24,27,0.65)';
+          ctx.fillText(fmtUsd(it.tvl), it.x, it.y + 13);
+        }
+      }
+    });
+
+    tvlBubbleData = items;
+  }
+
+  function attachBubbleTooltip(canvas, wrapEl) {
+    var tip = document.createElement('div');
+    tip.className = 'chart-tooltip';
+    if (getComputedStyle(wrapEl).position === 'static') wrapEl.style.position = 'relative';
+    wrapEl.appendChild(tip);
+
+    canvas.addEventListener('mousemove', function (e) {
+      var rect = canvas.getBoundingClientRect();
+      var x = e.clientX - rect.left, y = e.clientY - rect.top;
+      var hit = null;
+      for (var i = 0; i < tvlBubbleData.length; i++) {
+        var it = tvlBubbleData[i];
+        var dx = x - it.x, dy = y - it.y;
+        if (Math.sqrt(dx * dx + dy * dy) <= it.r) { hit = it; break; }
+      }
+      if (!hit) { tip.style.display = 'none'; return; }
+      tip.innerHTML = '<div class="chart-tooltip-date">' + escapeHtml(hit.name) + '</div>' +
+        '<div class="chart-tooltip-val">' + fmtUsd(hit.tvl) + '</div>' +
+        '<div class="chart-tooltip-sub">' + pctSpan(hit.change_1d || 0) + ' (24H)</div>';
+      tip.style.display = 'block';
+      tip.style.left = Math.min(Math.max(x, 55), rect.width - 55) + 'px';
+      tip.style.top = Math.max(y - 54, 4) + 'px';
+    });
+    canvas.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+  }
+
   function renderTvlRank(list) {
     var el = document.getElementById('tvlRankBody');
     if (!el) return;
@@ -609,6 +718,11 @@
         .sort(function (a, b) { return b.tvl - a.tvl; })
         .slice(0, 20);
       renderTvlRank(tvlRankList);
+
+      drawTvlBubbles(tvlRankList);
+      var tvlBubbleCanvas = document.getElementById('tvlBubbleChart');
+      var tvlBubbleWrap = document.getElementById('tvlBubbleWrap');
+      if (tvlBubbleCanvas && tvlBubbleWrap) attachBubbleTooltip(tvlBubbleCanvas, tvlBubbleWrap);
 
       var tvlRankTable = document.getElementById('tvlRankTable');
       if (!tvlRankTable) return;
