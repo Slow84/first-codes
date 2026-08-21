@@ -624,6 +624,9 @@
     // radius ∝ sqrt(tvl) so *area* (not radius) is proportional to TVL —
     // otherwise a 4x-bigger protocol would look 4x taller instead of 4x
     // more area, which reads as a much bigger exaggeration to the eye.
+    // The exact scale (k) barely matters here since everything gets
+    // rescaled to fit the canvas afterward anyway — it just needs to be in
+    // the right ballpark so packing doesn't take forever.
     var totalTvl = list.reduce(function (s, p) { return s + (p.tvl || 0); }, 0);
     var k = Math.sqrt((0.5 * w * h) / (Math.PI * totalTvl));
     var minR = 15;
@@ -632,6 +635,25 @@
     });
     items.sort(function (a, b) { return b.r - a.r; });
     packCircles(items, w / 2, h / 2);
+
+    // packing spreads outward in a roughly circular blob, but the canvas is
+    // a wide rectangle — without this, the blob overflows top/bottom (or
+    // left/right) and edge circles get cut off. Measure the actual bounding
+    // box of what got packed, then uniformly scale + recenter so the whole
+    // thing always fits inside the canvas, whatever its aspect ratio.
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    items.forEach(function (it) {
+      minX = Math.min(minX, it.x - it.r); maxX = Math.max(maxX, it.x + it.r);
+      minY = Math.min(minY, it.y - it.r); maxY = Math.max(maxY, it.y + it.r);
+    });
+    var padding = 8;
+    var fitScale = Math.min((w - padding * 2) / (maxX - minX), (h - padding * 2) / (maxY - minY));
+    var bboxCx = (minX + maxX) / 2, bboxCy = (minY + maxY) / 2;
+    items.forEach(function (it) {
+      it.x = w / 2 + (it.x - bboxCx) * fitScale;
+      it.y = h / 2 + (it.y - bboxCy) * fitScale;
+      it.r = it.r * fitScale;
+    });
 
     var good = cssVar('--good') || '#1F7A4C';
     var warn = cssVar('--warn') || '#B23A2E';
@@ -649,17 +671,28 @@
       ctx.strokeStyle = up ? good : warn;
       ctx.stroke();
 
-      if (it.r > 26) {
-        ctx.textAlign = 'center';
-        ctx.fillStyle = isDark ? '#fff' : '#18181b';
-        ctx.font = '700 ' + Math.min(13, it.r / 3.2) + 'px Inter, sans-serif';
-        var label = it.name.length > 12 ? it.name.slice(0, 11) + '…' : it.name;
-        ctx.fillText(label, it.x, it.y - (it.r > 40 ? 3 : 0));
-        if (it.r > 40) {
-          ctx.font = '600 11px Inter, sans-serif';
-          ctx.fillStyle = isDark ? 'rgba(244,244,245,0.75)' : 'rgba(24,24,27,0.65)';
-          ctx.fillText(fmtUsd(it.tvl), it.x, it.y + 13);
+      if (it.r < 20) return;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = isDark ? '#fff' : '#18181b';
+      var nameFont = Math.max(9, Math.min(13, it.r / 3.2));
+      ctx.font = '700 ' + nameFont + 'px Inter, sans-serif';
+      // truncate by measured width, not a fixed character count — a wide
+      // name like "Binance staked ETH" needs cutting off much sooner than
+      // a narrow one like "WBTC" does at the same circle size.
+      var maxTextWidth = it.r * 1.7;
+      var label = it.name;
+      if (ctx.measureText(label).width > maxTextWidth) {
+        while (label.length > 1 && ctx.measureText(label + '…').width > maxTextWidth) {
+          label = label.slice(0, -1);
         }
+        label += '…';
+      }
+      var showValue = it.r > 42;
+      ctx.fillText(label, it.x, it.y - (showValue ? 3 : 0));
+      if (showValue) {
+        ctx.font = '600 11px Inter, sans-serif';
+        ctx.fillStyle = isDark ? 'rgba(244,244,245,0.75)' : 'rgba(24,24,27,0.65)';
+        ctx.fillText(fmtUsd(it.tvl), it.x, it.y + 13);
       }
     });
 
