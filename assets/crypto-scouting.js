@@ -1,6 +1,28 @@
 (function () {
   var MAX_CANDIDATES = 15;
-  var DETAIL_DELAY_MS = 1500; // a dedicated demo key allows a bit faster pacing than anonymous access
+  var POOL_CONCURRENCY = 4; // confirmed via direct testing the demo key handles 14-15 concurrent calls fine; keeping some headroom since the key is shared across all visitors
+
+  // runs worker(item) over items with up to `concurrency` in flight at once,
+  // calling onEach after every settled item and onDone once all are done
+  function runPool(items, concurrency, worker, onEach, onDone) {
+    var idx = 0, active = 0, doneCount = 0;
+    if (!items.length) { onDone(); return; }
+    function next() {
+      if (idx >= items.length) {
+        if (active === 0) onDone();
+        return;
+      }
+      var item = items[idx++];
+      active++;
+      worker(item).catch(function () {}).then(function () {
+        active--;
+        doneCount++;
+        if (onEach) onEach(doneCount, items.length);
+        next();
+      });
+    }
+    for (var c = 0; c < concurrency && c < items.length; c++) next();
+  }
 
   // calls CoinGecko directly — see assets/crypto-market.js for why a
   // Worker-side proxy doesn't work here (CoinGecko 403s Cloudflare's IPs).
@@ -113,47 +135,39 @@
     });
   });
 
-  function fetchDetailsSequentially(i) {
-    if (i >= candidates.length) return;
-    var c = candidates[i];
-    fetch(cgUrl('/api/v3/coins/' + c.id + '?localization=false&tickers=false&market_data=false&community_data=true&developer_data=true&sparkline=false'))
-      .then(function (r) { return r.json(); })
-      .then(function (detail) {
-        var dev = detail.developer_data || {};
-        var com = detail.community_data || {};
-        c.devScore = dev.stars != null ? dev.stars : 0;
-        c.communityScore = (com.twitter_followers || 0) + (com.telegram_channel_user_count || 0) + (com.reddit_subscribers || 0);
-      })
-      .catch(function () { c.devScore = 0; c.communityScore = 0; })
-      .finally(function () {
-        render();
-        setTimeout(function () { fetchDetailsSequentially(i + 1); }, DETAIL_DELAY_MS);
-      });
+  function fetchDetails() {
+    runPool(candidates, POOL_CONCURRENCY, function (c) {
+      return fetch(cgUrl('/api/v3/coins/' + c.id + '?localization=false&tickers=false&market_data=false&community_data=true&developer_data=true&sparkline=false'))
+        .then(function (r) { return r.json(); })
+        .then(function (detail) {
+          var dev = detail.developer_data || {};
+          var com = detail.community_data || {};
+          c.devScore = dev.stars != null ? dev.stars : 0;
+          c.communityScore = (com.twitter_followers || 0) + (com.telegram_channel_user_count || 0) + (com.reddit_subscribers || 0);
+        })
+        .catch(function () { c.devScore = 0; c.communityScore = 0; });
+    }, function () { render(); }, function () {});
   }
 
   // scan market-cap rank 500-4000 instead of the top 250 — coins that
   // famous already aren't really "hidden gems." 250-per-page, so that's
-  // pages 3 through 16 (rank 501-4000), fetched one at a time to be gentle
-  // on the API.
+  // pages 3 through 16 (rank 501-4000).
   var START_PAGE = 3, END_PAGE = 16;
-  var PAGE_DELAY_MS = 1500;
   var allCoins = [];
 
-  function fetchPage(page) {
-    if (loadingMsg) loadingMsg.textContent = '시가총액 500~4000위 코인을 불러오는 중... (' + (page - START_PAGE + 1) + '/' + (END_PAGE - START_PAGE + 1) + ')';
-    fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=' + page + '&sparkline=false'))
-      .then(function (r) { return r.json(); })
-      .then(function (coins) {
-        if (Array.isArray(coins)) allCoins = allCoins.concat(coins);
-      })
-      .catch(function () {})
-      .finally(function () {
-        if (page < END_PAGE) {
-          setTimeout(function () { fetchPage(page + 1); }, PAGE_DELAY_MS);
-        } else {
-          finishLoading();
-        }
-      });
+  function fetchPages() {
+    var pages = [];
+    for (var p = START_PAGE; p <= END_PAGE; p++) pages.push(p);
+    runPool(pages, POOL_CONCURRENCY, function (page) {
+      return fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=' + page + '&sparkline=false'))
+        .then(function (r) { return r.json(); })
+        .then(function (coins) {
+          if (Array.isArray(coins)) allCoins = allCoins.concat(coins);
+        })
+        .catch(function () {});
+    }, function (done, total) {
+      if (loadingMsg) loadingMsg.textContent = '시가총액 500~4000위 코인을 불러오는 중... (' + done + '/' + total + ')';
+    }, finishLoading);
   }
 
   function finishLoading() {
@@ -174,8 +188,8 @@
     }
     table.style.display = '';
     render();
-    fetchDetailsSequentially(0);
+    fetchDetails();
   }
 
-  fetchPage(START_PAGE);
+  fetchPages();
 })();
