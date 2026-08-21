@@ -773,13 +773,6 @@ textarea.comment-field { resize: vertical; margin-top: 10px; }
   background: var(--bg-soft); touch-action: none; cursor: default;
 }
 @media (max-width: 700px) { .bubble-canvas { height: 300px; } }
-.bubble-reset-btn {
-  position: absolute; top: 10px; right: 10px;
-  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
-  padding: 6px 14px; font-size: 12px; font-weight: 700; color: var(--text);
-  cursor: pointer; box-shadow: 0 2px 8px rgba(18,18,18,0.08);
-}
-.bubble-reset-btn:hover { border-color: var(--ink); }
 
 .rank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 700px) { .rank-grid { grid-template-columns: 1fr; } }

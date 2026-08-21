@@ -705,7 +705,11 @@
       (document.documentElement.getAttribute('data-theme') !== 'light' &&
         window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
-    tvlBubbleItems.forEach(function (it) {
+    // draw big-to-small (not the shuffled placement order) so a large
+    // circle drawn after a small one in placement order never paints over
+    // and hides it — every circle stays visible regardless of z-order luck.
+    var drawOrder = tvlBubbleItems.slice().sort(function (a, b) { return b.r - a.r; });
+    drawOrder.forEach(function (it) {
       // hue runs green (150°, calm) -> red (0°, volatile) by how much the
       // protocol's TVL moved recently; lightness runs pale -> deep by how
       // big its TVL is. Two independent signals, one color, decoded at a
@@ -724,15 +728,23 @@
       // gate on the *apparent* (zoomed) size, not the raw world radius —
       // otherwise a circle that's tiny in the base layout stays textless
       // forever even after zooming in far enough to make it huge on screen.
-      if (it.r * tvlBubbleView.scale < 20) return;
+      // Threshold is a bit higher than the old 20 to leave breathing room
+      // between adjacent labeled circles once many are visible at once.
+      if (it.r * tvlBubbleView.scale < 26) return;
       ctx.textAlign = 'center';
       ctx.fillStyle = isDark ? '#fff' : '#18181b';
-      var nameFont = Math.max(9, Math.min(13, it.r / 3.2));
+      // no artificial floor — font tracks circle size directly, so a small
+      // circle's text starts small too (readable only once zoomed in
+      // enough) instead of being forced to a minimum that overflows a
+      // circle much smaller than the floor was designed for.
+      var nameFont = Math.min(13, it.r / 3.4);
       ctx.font = '700 ' + nameFont + 'px Inter, sans-serif';
       // truncate by measured width, not a fixed character count — a wide
       // name like "Binance staked ETH" needs cutting off much sooner than
-      // a narrow one like "WBTC" does at the same circle size.
-      var maxTextWidth = it.r * 1.7;
+      // a narrow one like "WBTC" does at the same circle size. Kept tighter
+      // than the circle's full width so adjacent (touching) circles' labels
+      // don't bleed into each other.
+      var maxTextWidth = it.r * 1.4;
       var label = it.name;
       if (ctx.measureText(label).width > maxTextWidth) {
         while (label.length > 1 && ctx.measureText(label + '…').width > maxTextWidth) {
@@ -742,8 +754,8 @@
       }
       // show the $ amount under the name at any label-worthy size (not just
       // large circles) — sized down with the circle so it still fits.
-      var valueFont = Math.max(7.5, Math.min(11, it.r / 4.2));
-      var lineGap = Math.max(9, nameFont * 0.85);
+      var valueFont = Math.min(11, it.r / 4.6);
+      var lineGap = Math.max(8, nameFont * 0.85);
       ctx.fillText(label, it.x, it.y - lineGap / 2 + 2);
       ctx.font = '600 ' + valueFont + 'px Inter, sans-serif';
       ctx.fillStyle = isDark ? 'rgba(244,244,245,0.75)' : 'rgba(24,24,27,0.65)';
@@ -786,7 +798,7 @@
     renderTvlBubbleFrame();
   }
 
-  function attachBubbleInteraction(canvas, wrapEl, resetBtn) {
+  function attachBubbleInteraction(canvas, wrapEl) {
     var tip = document.createElement('div');
     tip.className = 'chart-tooltip';
     if (getComputedStyle(wrapEl).position === 'static') wrapEl.style.position = 'relative';
@@ -909,14 +921,6 @@
       touchState = null;
     });
     canvas.addEventListener('touchcancel', function () { touchState = null; });
-
-    if (resetBtn) {
-      resetBtn.addEventListener('click', function () {
-        tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
-        canvas.style.cursor = 'default';
-        renderTvlBubbleFrame();
-      });
-    }
   }
 
   function renderTvlRank(list) {
@@ -951,8 +955,7 @@
       drawTvlBubbles(sortedProtocols.slice(0, 100));
       var tvlBubbleCanvas = document.getElementById('tvlBubbleChart');
       var tvlBubbleWrap = document.getElementById('tvlBubbleWrap');
-      var tvlBubbleReset = document.getElementById('tvlBubbleReset');
-      if (tvlBubbleCanvas && tvlBubbleWrap) attachBubbleInteraction(tvlBubbleCanvas, tvlBubbleWrap, tvlBubbleReset);
+      if (tvlBubbleCanvas && tvlBubbleWrap) attachBubbleInteraction(tvlBubbleCanvas, tvlBubbleWrap);
 
       var tvlRankTable = document.getElementById('tvlRankTable');
       if (!tvlRankTable) return;
