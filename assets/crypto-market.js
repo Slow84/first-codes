@@ -620,6 +620,7 @@
   // it at render time. Keeping these separate means panning/zooming never
   // needs to re-run the (somewhat expensive) packing search, just redraw.
   var tvlBubbleItems = [];
+  var tvlBubbleFullList = []; // the raw (un-laid-out) protocol list, so a range-tab click can re-layout without refetching
   var tvlBubbleCanvasSize = { w: 0, h: 0 };
   var tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
   // computed per data load (see computeTvlBubbleLayout) so the biggest
@@ -659,18 +660,29 @@
     return (words[0] || '').slice(0, 4).toUpperCase();
   }
 
-  function computeTvlBubbleLayout(list, w, h) {
-    // radius ∝ tvl^POWER. Pure area-proportional (POWER=0.5, i.e. sqrt) is
-    // the "honest" bubble-chart standard, but the user found it made
-    // mid-size protocols look too similar (e.g. a 2.6x TVL gap only became
-    // a 1.6x radius gap) — bumped to 0.65 per their explicit call, trading
-    // some of that strict-proportionality honesty for more visible spread
-    // between small/mid protocols. The exact scale (k) barely matters
-    // since everything gets rescaled to fit the canvas afterward anyway —
-    // it just needs to be in the right ballpark so packing doesn't take
-    // forever.
+  function computeTvlBubbleLayout(list, w, h, range) {
+    // circle size is how much TVL actually *moved* over the selected
+    // period (일/주), not the static current total — so switching tabs
+    // re-ranks who's big (today's/this week's biggest movers), not just
+    // recolors the same TVL-leaderboard sizes. Needs a full re-layout
+    // (not just a redraw) since every radius depends on which range is
+    // active — this function re-runs on every tab click, not just once.
+    var withDelta = list.map(function (p) {
+      var changeVal = range === '7d' ? (p.change_7d || 0) : (p.change_1d || 0);
+      var deltaAmount = changeVal ? p.tvl * changeVal / (100 + changeVal) : 0;
+      return { p: p, changeVal: changeVal, deltaAmount: deltaAmount };
+    });
+
+    // radius ∝ |Δamount|^POWER. Pure area-proportional (POWER=0.5, i.e.
+    // sqrt) is the "honest" bubble-chart standard, but the user found the
+    // TVL-sized version made mid-size protocols look too similar — bumped
+    // to 0.65 per their explicit call, trading some strict-proportionality
+    // honesty for more visible spread between small/mid movers. The exact
+    // scale (k) barely matters since everything gets rescaled to fit the
+    // canvas afterward anyway — it just needs to be in the right ballpark
+    // so packing doesn't take forever.
     var SIZE_POWER = 0.65;
-    var sumPow = list.reduce(function (s, p) { return s + Math.pow(p.tvl || 1, SIZE_POWER * 2); }, 0);
+    var sumPow = withDelta.reduce(function (s, d) { return s + Math.pow(Math.abs(d.deltaAmount) || 1, SIZE_POWER * 2); }, 0);
     var k = Math.sqrt((0.5 * w * h) / (Math.PI * sumPow));
     // checked against real data: with 100 protocols, a floor of 10 clamped
     // 44 of them to the exact same radius, erasing real TVL differences
@@ -679,14 +691,12 @@
     // the base view and only grow (and gain a label) once zoomed in.
     var minR = 3;
 
-    // color (direction + magnitude of change) depends on which range (일/주)
-    // is selected, so it's computed per-frame in renderTvlBubbleFrame
-    // instead of baked in here — switching ranges is then just a redraw,
-    // not a re-layout. Circle size is the only thing TVL itself controls.
-    var items = list.map(function (p) {
+    var items = withDelta.map(function (d) {
+      var p = d.p;
       return {
-        name: p.name, tvl: p.tvl, slug: p.slug, symbol: p.symbol, change_1d: p.change_1d, change_7d: p.change_7d,
-        r: Math.max(minR, k * Math.pow(p.tvl || 1, SIZE_POWER))
+        name: p.name, tvl: p.tvl, slug: p.slug, symbol: p.symbol,
+        changeVal: d.changeVal, deltaAmount: d.deltaAmount,
+        r: Math.max(minR, k * Math.pow(Math.abs(d.deltaAmount) || 1, SIZE_POWER))
       };
     });
     shuffle(items);
@@ -747,13 +757,14 @@
     // and hides it — every circle stays visible regardless of z-order luck.
     var drawOrder = tvlBubbleItems.slice().sort(function (a, b) { return b.r - a.r; });
     drawOrder.forEach(function (it) {
-      // color is entirely about the period's change now — direction picks
-      // the hue family (green = grew, red = shrank), magnitude picks how
+      // color is entirely about the period's change — direction picks the
+      // hue family (green = grew, red = shrank), magnitude picks how
       // deep/saturated it is (barely moved = pale, swung hard = vivid).
-      // TVL size doesn't need its own color channel since circle size
-      // already shows it directly; doubling it into lightness too (the old
-      // scheme) just made the size/direction signals harder to read apart.
-      var changeVal = tvlBubbleRange === '7d' ? (it.change_7d || 0) : (it.change_1d || 0);
+      // it.changeVal/it.deltaAmount were computed once per layout (for
+      // whichever range was active when the layout was built), not
+      // recomputed here, since size itself now depends on the range too —
+      // switching tabs re-lays-out, it doesn't just redraw.
+      var changeVal = it.changeVal;
       var magT = Math.min(1, Math.abs(changeVal) / TVL_BUBBLE_VOL_CAP[tvlBubbleRange]);
       var hue = changeVal >= 0 ? 150 : 5;
       var lightness = (isDark ? 68 : 88) - (isDark ? 33 : 48) * magT;
@@ -802,12 +813,9 @@
         }
         label += '…';
       }
-      // show how much TVL actually moved over the selected period (not the
-      // static current total, which never changed when switching 일/주 and
-      // made the tab feel like it only recolored things) — derived from
-      // the % change DeFiLlama gives us: previous = current/(1+change/100),
-      // delta = current - previous.
-      var deltaAmount = changeVal ? it.tvl * changeVal / (100 + changeVal) : 0;
+      // how much TVL actually moved over the selected period — also
+      // precomputed in the layout step now that it drives circle size too.
+      var deltaAmount = it.deltaAmount;
       var valueFont = Math.min(11, it.r / 4.6);
       // no floor and no arbitrary offset here either — gap is purely each
       // line's own half-height plus a hair of breathing room, so the pair
@@ -825,12 +833,13 @@
   function drawTvlBubbles(list) {
     var canvas = document.getElementById('tvlBubbleChart');
     if (!canvas || !list.length) return;
+    tvlBubbleFullList = list; // cached so a range-tab click can re-layout without refetching
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
     var w = canvas.clientWidth, h = canvas.clientHeight;
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     tvlBubbleCanvasSize = { w: w, h: h };
-    tvlBubbleItems = computeTvlBubbleLayout(list, w, h);
+    tvlBubbleItems = computeTvlBubbleLayout(list, w, h, tvlBubbleRange);
     tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
     renderTvlBubbleFrame();
   }
@@ -876,11 +885,10 @@
 
     function showTip(hit, screenX, screenY, rect) {
       if (!hit) { tip.style.display = 'none'; return; }
-      var changeVal = tvlBubbleRange === '7d' ? hit.change_7d : hit.change_1d;
       var changeLabel = tvlBubbleRange === '7d' ? '7일' : '24H';
       tip.innerHTML = '<div class="chart-tooltip-date">' + escapeHtml(hit.name) + '</div>' +
         '<div class="chart-tooltip-val">' + fmtUsd(hit.tvl) + '</div>' +
-        '<div class="chart-tooltip-sub">' + pctSpan(changeVal || 0) + ' (' + changeLabel + ')</div>';
+        '<div class="chart-tooltip-sub">' + pctSpan(hit.changeVal || 0) + ' (' + changeLabel + ')</div>';
       tip.style.display = 'block';
       tip.style.left = Math.min(Math.max(screenX, 55), rect.width - 55) + 'px';
       tip.style.top = Math.max(screenY - 54, 4) + 'px';
@@ -1026,7 +1034,7 @@
           tvlBubbleRangeTabs.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
           btn.classList.add('active');
           tvlBubbleRange = btn.getAttribute('data-bubble-range');
-          renderTvlBubbleFrame(); // color only — no re-layout needed
+          drawTvlBubbles(tvlBubbleFullList); // full re-layout — circle size itself depends on the range now, not just color
         });
       }
 
