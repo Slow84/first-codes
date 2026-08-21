@@ -609,18 +609,16 @@
     return items;
   }
 
-  var tvlBubbleData = [];
-  function drawTvlBubbles(list) {
-    var canvas = document.getElementById('tvlBubbleChart');
-    if (!canvas || !list.length) return;
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    var w = canvas.clientWidth, h = canvas.clientHeight;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    var ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
+  // world-space layout (computed once per data load — "fit everything"
+  // view at scale 1) and the current pan/zoom view state applied on top of
+  // it at render time. Keeping these separate means panning/zooming never
+  // needs to re-run the (somewhat expensive) packing search, just redraw.
+  var tvlBubbleItems = [];
+  var tvlBubbleCanvasSize = { w: 0, h: 0 };
+  var tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
+  var TVL_BUBBLE_MAX_SCALE = 6;
 
+  function computeTvlBubbleLayout(list, w, h) {
     // radius ∝ sqrt(tvl) so *area* (not radius) is proportional to TVL —
     // otherwise a 4x-bigger protocol would look 4x taller instead of 4x
     // more area, which reads as a much bigger exaggeration to the eye.
@@ -640,7 +638,8 @@
     // a wide rectangle — without this, the blob overflows top/bottom (or
     // left/right) and edge circles get cut off. Measure the actual bounding
     // box of what got packed, then uniformly scale + recenter so the whole
-    // thing always fits inside the canvas, whatever its aspect ratio.
+    // thing exactly fills [0,w]x[0,h] — this becomes the "zoomed all the
+    // way out" baseline that panning/zooming builds on top of.
     var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     items.forEach(function (it) {
       minX = Math.min(minX, it.x - it.r); maxX = Math.max(maxX, it.x + it.r);
@@ -654,6 +653,22 @@
       it.y = h / 2 + (it.y - bboxCy) * fitScale;
       it.r = it.r * fitScale;
     });
+    return items;
+  }
+
+  function renderTvlBubbleFrame() {
+    var canvas = document.getElementById('tvlBubbleChart');
+    if (!canvas) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = tvlBubbleCanvasSize.w, h = tvlBubbleCanvasSize.h;
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    // compose the device-pixel-ratio transform with the pan/zoom transform
+    // in one setTransform call — letting the canvas transform (not manual
+    // per-item math) handle the zoom means text scales up right along with
+    // the circles, which is exactly what makes zooming in useful here.
+    ctx.setTransform(dpr * tvlBubbleView.scale, 0, 0, dpr * tvlBubbleView.scale, dpr * tvlBubbleView.ox, dpr * tvlBubbleView.oy);
 
     var good = cssVar('--good') || '#1F7A4C';
     var warn = cssVar('--warn') || '#B23A2E';
@@ -661,13 +676,13 @@
       (document.documentElement.getAttribute('data-theme') !== 'light' &&
         window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
-    items.forEach(function (it) {
+    tvlBubbleItems.forEach(function (it) {
       var up = (it.change_1d || 0) >= 0;
       ctx.beginPath();
       ctx.arc(it.x, it.y, it.r, 0, Math.PI * 2);
       ctx.fillStyle = up ? good + '38' : warn + '38';
       ctx.fill();
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.5 / tvlBubbleView.scale;
       ctx.strokeStyle = up ? good : warn;
       ctx.stroke();
 
@@ -696,34 +711,150 @@
       ctx.fillStyle = isDark ? 'rgba(244,244,245,0.75)' : 'rgba(24,24,27,0.65)';
       ctx.fillText(fmtUsd(it.tvl), it.x, it.y + lineGap / 2 + 2);
     });
-
-    tvlBubbleData = items;
   }
 
-  function attachBubbleTooltip(canvas, wrapEl) {
+  function drawTvlBubbles(list) {
+    var canvas = document.getElementById('tvlBubbleChart');
+    if (!canvas || !list.length) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    tvlBubbleCanvasSize = { w: w, h: h };
+    tvlBubbleItems = computeTvlBubbleLayout(list, w, h);
+    tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
+    renderTvlBubbleFrame();
+  }
+
+  // keeps panning from dragging the content completely off-screen: since
+  // the layout exactly fills [0,w]x[0,h] at scale 1, at any scale the
+  // valid offset range is just w*(1-scale)..0 (and the same for y).
+  function clampTvlBubbleView() {
+    var w = tvlBubbleCanvasSize.w, h = tvlBubbleCanvasSize.h;
+    var scale = Math.max(1, Math.min(TVL_BUBBLE_MAX_SCALE, tvlBubbleView.scale));
+    tvlBubbleView.scale = scale;
+    if (scale <= 1) { tvlBubbleView.ox = 0; tvlBubbleView.oy = 0; return; }
+    tvlBubbleView.ox = Math.min(0, Math.max(w * (1 - scale), tvlBubbleView.ox));
+    tvlBubbleView.oy = Math.min(0, Math.max(h * (1 - scale), tvlBubbleView.oy));
+  }
+
+  function zoomTvlBubbleAt(screenX, screenY, factor) {
+    var newScale = Math.max(1, Math.min(TVL_BUBBLE_MAX_SCALE, tvlBubbleView.scale * factor));
+    var actualFactor = newScale / tvlBubbleView.scale;
+    tvlBubbleView.ox = screenX - (screenX - tvlBubbleView.ox) * actualFactor;
+    tvlBubbleView.oy = screenY - (screenY - tvlBubbleView.oy) * actualFactor;
+    tvlBubbleView.scale = newScale;
+    clampTvlBubbleView();
+    renderTvlBubbleFrame();
+  }
+
+  function attachBubbleInteraction(canvas, wrapEl, resetBtn) {
     var tip = document.createElement('div');
     tip.className = 'chart-tooltip';
     if (getComputedStyle(wrapEl).position === 'static') wrapEl.style.position = 'relative';
     wrapEl.appendChild(tip);
 
-    canvas.addEventListener('mousemove', function (e) {
-      var rect = canvas.getBoundingClientRect();
-      var x = e.clientX - rect.left, y = e.clientY - rect.top;
-      var hit = null;
-      for (var i = 0; i < tvlBubbleData.length; i++) {
-        var it = tvlBubbleData[i];
-        var dx = x - it.x, dy = y - it.y;
-        if (Math.sqrt(dx * dx + dy * dy) <= it.r) { hit = it; break; }
+    function hitTest(screenX, screenY) {
+      var wx = (screenX - tvlBubbleView.ox) / tvlBubbleView.scale;
+      var wy = (screenY - tvlBubbleView.oy) / tvlBubbleView.scale;
+      for (var i = 0; i < tvlBubbleItems.length; i++) {
+        var it = tvlBubbleItems[i];
+        var dx = wx - it.x, dy = wy - it.y;
+        if (Math.sqrt(dx * dx + dy * dy) <= it.r) return it;
       }
+      return null;
+    }
+
+    function showTip(hit, screenX, screenY, rect) {
       if (!hit) { tip.style.display = 'none'; return; }
       tip.innerHTML = '<div class="chart-tooltip-date">' + escapeHtml(hit.name) + '</div>' +
         '<div class="chart-tooltip-val">' + fmtUsd(hit.tvl) + '</div>' +
         '<div class="chart-tooltip-sub">' + pctSpan(hit.change_1d || 0) + ' (24H)</div>';
       tip.style.display = 'block';
-      tip.style.left = Math.min(Math.max(x, 55), rect.width - 55) + 'px';
-      tip.style.top = Math.max(y - 54, 4) + 'px';
+      tip.style.left = Math.min(Math.max(screenX, 55), rect.width - 55) + 'px';
+      tip.style.top = Math.max(screenY - 54, 4) + 'px';
+    }
+
+    // ---- mouse: wheel to zoom, drag to pan, hover for tooltip ----
+    var mouseDrag = null;
+    canvas.addEventListener('mousedown', function (e) {
+      mouseDrag = { x: e.clientX, y: e.clientY, ox: tvlBubbleView.ox, oy: tvlBubbleView.oy };
+      tip.style.display = 'none';
+      canvas.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!mouseDrag) return;
+      tvlBubbleView.ox = mouseDrag.ox + (e.clientX - mouseDrag.x);
+      tvlBubbleView.oy = mouseDrag.oy + (e.clientY - mouseDrag.y);
+      clampTvlBubbleView();
+      renderTvlBubbleFrame();
+    });
+    window.addEventListener('mouseup', function () {
+      if (mouseDrag) { mouseDrag = null; canvas.style.cursor = tvlBubbleView.scale > 1 ? 'grab' : 'default'; }
+    });
+    canvas.addEventListener('mousemove', function (e) {
+      if (mouseDrag) return;
+      var rect = canvas.getBoundingClientRect();
+      var x = e.clientX - rect.left, y = e.clientY - rect.top;
+      showTip(hitTest(x, y), x, y, rect);
     });
     canvas.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+    canvas.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var rect = canvas.getBoundingClientRect();
+      zoomTvlBubbleAt(e.clientX - rect.left, e.clientY - rect.top, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+      canvas.style.cursor = tvlBubbleView.scale > 1 ? 'grab' : 'default';
+    }, { passive: false });
+
+    // ---- touch: one finger pans, two fingers pinch-zoom ----
+    var touchState = null;
+    function touchDist(t) {
+      var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    canvas.addEventListener('touchstart', function (e) {
+      tip.style.display = 'none';
+      if (e.touches.length === 1) {
+        touchState = { mode: 'pan', x: e.touches[0].clientX, y: e.touches[0].clientY, ox: tvlBubbleView.ox, oy: tvlBubbleView.oy };
+      } else if (e.touches.length === 2) {
+        var rect = canvas.getBoundingClientRect();
+        touchState = {
+          mode: 'pinch', dist: touchDist(e.touches),
+          midX: (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left,
+          midY: (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top,
+          scale: tvlBubbleView.scale, ox: tvlBubbleView.ox, oy: tvlBubbleView.oy
+        };
+      }
+    }, { passive: true });
+    canvas.addEventListener('touchmove', function (e) {
+      if (!touchState) return;
+      e.preventDefault();
+      if (touchState.mode === 'pan' && e.touches.length === 1) {
+        tvlBubbleView.ox = touchState.ox + (e.touches[0].clientX - touchState.x);
+        tvlBubbleView.oy = touchState.oy + (e.touches[0].clientY - touchState.y);
+        clampTvlBubbleView();
+        renderTvlBubbleFrame();
+      } else if (touchState.mode === 'pinch' && e.touches.length === 2) {
+        var ratio = touchDist(e.touches) / touchState.dist;
+        var newScale = Math.max(1, Math.min(TVL_BUBBLE_MAX_SCALE, touchState.scale * ratio));
+        var actualFactor = newScale / touchState.scale;
+        tvlBubbleView.ox = touchState.midX - (touchState.midX - touchState.ox) * actualFactor;
+        tvlBubbleView.oy = touchState.midY - (touchState.midY - touchState.oy) * actualFactor;
+        tvlBubbleView.scale = newScale;
+        clampTvlBubbleView();
+        renderTvlBubbleFrame();
+      }
+    }, { passive: false });
+    canvas.addEventListener('touchend', function () { touchState = null; });
+    canvas.addEventListener('touchcancel', function () { touchState = null; });
+
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function () {
+        tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
+        canvas.style.cursor = 'default';
+        renderTvlBubbleFrame();
+      });
+    }
   }
 
   function renderTvlRank(list) {
@@ -756,7 +887,8 @@
       drawTvlBubbles(tvlRankList);
       var tvlBubbleCanvas = document.getElementById('tvlBubbleChart');
       var tvlBubbleWrap = document.getElementById('tvlBubbleWrap');
-      if (tvlBubbleCanvas && tvlBubbleWrap) attachBubbleTooltip(tvlBubbleCanvas, tvlBubbleWrap);
+      var tvlBubbleReset = document.getElementById('tvlBubbleReset');
+      if (tvlBubbleCanvas && tvlBubbleWrap) attachBubbleInteraction(tvlBubbleCanvas, tvlBubbleWrap, tvlBubbleReset);
 
       var tvlRankTable = document.getElementById('tvlRankTable');
       if (!tvlRankTable) return;
