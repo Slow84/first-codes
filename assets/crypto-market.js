@@ -617,6 +617,8 @@
   var tvlBubbleCanvasSize = { w: 0, h: 0 };
   var tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
   var TVL_BUBBLE_MAX_SCALE = 6;
+  var tvlBubbleRange = '1d'; // '1d' or '7d' — which change field drives the volatility color
+  var TVL_BUBBLE_VOL_CAP = 25; // % change treated as "maximally volatile" for color purposes
 
   // Fisher-Yates — packing in size order always puts the biggest protocol
   // dead center with everything else ranked outward, which reads as
@@ -651,15 +653,15 @@
     var logMin = Math.log(Math.min.apply(null, tvls));
     var logMax = Math.log(Math.max.apply(null, tvls));
     var logRange = Math.max(1e-6, logMax - logMin);
-    var VOL_CAP = 25; // % change treated as "maximally volatile" for color purposes
 
+    // volatility color depends on which range (일/주) is selected, so it's
+    // computed per-frame in renderTvlBubbleFrame instead of baked in here —
+    // switching ranges is then just a redraw, not a re-layout.
     var items = list.map(function (p) {
-      var vol = Math.max(Math.abs(p.change_1d || 0), Math.abs(p.change_7d || 0));
       return {
         name: p.name, tvl: p.tvl, slug: p.slug, change_1d: p.change_1d, change_7d: p.change_7d,
         r: Math.max(minR, k * Math.sqrt(p.tvl)),
-        sizeT: (Math.log(p.tvl || 1) - logMin) / logRange,
-        volT: Math.min(1, vol / VOL_CAP)
+        sizeT: (Math.log(p.tvl || 1) - logMin) / logRange
       };
     });
     shuffle(items);
@@ -711,10 +713,13 @@
     var drawOrder = tvlBubbleItems.slice().sort(function (a, b) { return b.r - a.r; });
     drawOrder.forEach(function (it) {
       // hue runs green (150°, calm) -> red (0°, volatile) by how much the
-      // protocol's TVL moved recently; lightness runs pale -> deep by how
-      // big its TVL is. Two independent signals, one color, decoded at a
-      // glance: pale+green = small & calm, deep+red = big & volatile.
-      var hue = 150 - 150 * it.volT;
+      // protocol's TVL moved recently (일/주 toggle picks which field);
+      // lightness runs pale -> deep by how big its TVL is. Two independent
+      // signals, one color, decoded at a glance: pale+green = small & calm,
+      // deep+red = big & volatile.
+      var changeVal = tvlBubbleRange === '7d' ? (it.change_7d || 0) : (it.change_1d || 0);
+      var volT = Math.min(1, Math.abs(changeVal) / TVL_BUBBLE_VOL_CAP);
+      var hue = 150 - 150 * volT;
       var lightness = (isDark ? 62 : 82) - (isDark ? 30 : 45) * it.sizeT;
       var saturation = 35 + 35 * it.sizeT;
       ctx.beginPath();
@@ -817,9 +822,11 @@
 
     function showTip(hit, screenX, screenY, rect) {
       if (!hit) { tip.style.display = 'none'; return; }
+      var changeVal = tvlBubbleRange === '7d' ? hit.change_7d : hit.change_1d;
+      var changeLabel = tvlBubbleRange === '7d' ? '7일' : '24H';
       tip.innerHTML = '<div class="chart-tooltip-date">' + escapeHtml(hit.name) + '</div>' +
         '<div class="chart-tooltip-val">' + fmtUsd(hit.tvl) + '</div>' +
-        '<div class="chart-tooltip-sub">' + pctSpan(hit.change_1d || 0) + ' (24H)</div>';
+        '<div class="chart-tooltip-sub">' + pctSpan(changeVal || 0) + ' (' + changeLabel + ')</div>';
       tip.style.display = 'block';
       tip.style.left = Math.min(Math.max(screenX, 55), rect.width - 55) + 'px';
       tip.style.top = Math.max(screenY - 54, 4) + 'px';
@@ -956,6 +963,18 @@
       var tvlBubbleCanvas = document.getElementById('tvlBubbleChart');
       var tvlBubbleWrap = document.getElementById('tvlBubbleWrap');
       if (tvlBubbleCanvas && tvlBubbleWrap) attachBubbleInteraction(tvlBubbleCanvas, tvlBubbleWrap);
+
+      var tvlBubbleRangeTabs = document.getElementById('tvlBubbleRangeTabs');
+      if (tvlBubbleRangeTabs) {
+        tvlBubbleRangeTabs.addEventListener('click', function (e) {
+          var btn = e.target.closest('.tab-btn');
+          if (!btn) return;
+          tvlBubbleRangeTabs.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          tvlBubbleRange = btn.getAttribute('data-bubble-range');
+          renderTvlBubbleFrame(); // color only — no re-layout needed
+        });
+      }
 
       var tvlRankTable = document.getElementById('tvlRankTable');
       if (!tvlRankTable) return;
