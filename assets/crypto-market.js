@@ -100,6 +100,11 @@
     if (spanMs <= 2 * 24 * 60 * 60 * 1000) {
       return d.getHours() + '시';
     }
+    // spans over a year (only "전체") repeat the same M/D every year, so
+    // prefix a 2-digit year to keep labels unambiguous.
+    if (spanMs > 365 * 24 * 60 * 60 * 1000) {
+      return (d.getFullYear() % 100) + '.' + (d.getMonth() + 1) + '/' + d.getDate();
+    }
     return (d.getMonth() + 1) + '/' + d.getDate();
   }
 
@@ -246,7 +251,9 @@
 
       var p = prices[idx];
       var dt = new Date(p[0]);
-      var dateStr = (dt.getMonth() + 1) + '/' + dt.getDate() + ' ' + dt.getHours() + '시';
+      var span = prices[prices.length - 1][0] - prices[0][0];
+      var yearPrefix = span > 365 * 24 * 60 * 60 * 1000 ? (dt.getFullYear() % 100) + '.' : '';
+      var dateStr = yearPrefix + (dt.getMonth() + 1) + '/' + dt.getDate() + ' ' + dt.getHours() + '시';
       var sub = secondaryFn ? secondaryFn(p[1]) : '';
       tip.innerHTML = '<div class="chart-tooltip-date">' + dateStr + '</div>' +
         '<div class="chart-tooltip-val">' + fmtFn(p[1]) + '</div>' +
