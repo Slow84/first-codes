@@ -687,13 +687,14 @@
         }
         label += '…';
       }
-      var showValue = it.r > 42;
-      ctx.fillText(label, it.x, it.y - (showValue ? 3 : 0));
-      if (showValue) {
-        ctx.font = '600 11px Inter, sans-serif';
-        ctx.fillStyle = isDark ? 'rgba(244,244,245,0.75)' : 'rgba(24,24,27,0.65)';
-        ctx.fillText(fmtUsd(it.tvl), it.x, it.y + 13);
-      }
+      // show the $ amount under the name at any label-worthy size (not just
+      // large circles) — sized down with the circle so it still fits.
+      var valueFont = Math.max(7.5, Math.min(11, it.r / 4.2));
+      var lineGap = Math.max(9, nameFont * 0.85);
+      ctx.fillText(label, it.x, it.y - lineGap / 2 + 2);
+      ctx.font = '600 ' + valueFont + 'px Inter, sans-serif';
+      ctx.fillStyle = isDark ? 'rgba(244,244,245,0.75)' : 'rgba(24,24,27,0.65)';
+      ctx.fillText(fmtUsd(it.tvl), it.x, it.y + lineGap / 2 + 2);
     });
 
     tvlBubbleData = items;
