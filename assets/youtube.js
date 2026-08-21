@@ -1,11 +1,21 @@
 (function () {
   var grid = document.getElementById('videoGrid');
+  var regionTabsEl = document.getElementById('regionTabs');
   var rangeTabsEl = document.getElementById('rangeTabs');
   var categoryTabsEl = document.getElementById('categoryTabs');
   if (!grid || !rangeTabsEl) return;
 
-  var region = document.body.getAttribute('data-yt-region') || 'KR';
-  var cache = {}; // "range:category" -> videos, so switching tabs back doesn't refetch
+  // KR gets a narrower set — sports/gaming/comedy/education were tried and
+  // dropped after testing found almost no genuinely Korean content in those
+  // categories (see worker.js CATEGORY_IDS comment). Global doesn't have
+  // that data-scarcity problem, so it keeps the full set.
+  var CATEGORY_SETS = {
+    KR: [['all', '전체'], ['news', '뉴스/시사'], ['music', '음악'], ['entertainment', '엔터테인먼트']],
+    US: [['all', '전체'], ['news', '뉴스/시사'], ['sports', '스포츠'], ['gaming', '게임'], ['music', '음악'], ['entertainment', '엔터테인먼트'], ['comedy', '코미디'], ['education', '교육']]
+  };
+
+  var cache = {}; // "region:range:category" -> videos
+  var currentRegion = 'KR';
   var currentRange = 'today';
   var currentCategory = 'all';
 
@@ -39,11 +49,11 @@
     }).join('');
   }
 
-  function load(range, category) {
-    var key = range + ':' + category;
+  function load() {
+    var key = currentRegion + ':' + currentRange + ':' + currentCategory;
     if (cache[key]) { renderVideos(cache[key]); return; }
     grid.innerHTML = '<p class="loading-note">불러오는 중...</p>';
-    fetch('/api/yt?region=' + encodeURIComponent(region) + '&range=' + encodeURIComponent(range) + '&category=' + encodeURIComponent(category))
+    fetch('/api/yt?region=' + encodeURIComponent(currentRegion) + '&range=' + encodeURIComponent(currentRange) + '&category=' + encodeURIComponent(currentCategory))
       .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
       .then(function (res) {
         if (!res.ok) throw new Error(res.data.error || 'failed');
@@ -55,13 +65,33 @@
       });
   }
 
+  function renderCategoryTabs() {
+    if (!categoryTabsEl) return;
+    categoryTabsEl.innerHTML = CATEGORY_SETS[currentRegion].map(function (c, i) {
+      return '<button type="button" class="tab-btn' + (i === 0 ? ' active' : '') + '" data-category="' + c[0] + '">' + c[1] + '</button>';
+    }).join('');
+  }
+
+  if (regionTabsEl) {
+    regionTabsEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('.tab-btn');
+      if (!btn) return;
+      regionTabsEl.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      currentRegion = btn.getAttribute('data-region');
+      currentCategory = 'all';
+      renderCategoryTabs();
+      load();
+    });
+  }
+
   rangeTabsEl.addEventListener('click', function (e) {
     var btn = e.target.closest('.tab-btn');
     if (!btn) return;
     rangeTabsEl.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
     btn.classList.add('active');
     currentRange = btn.getAttribute('data-range');
-    load(currentRange, currentCategory);
+    load();
   });
 
   if (categoryTabsEl) {
@@ -71,9 +101,10 @@
       categoryTabsEl.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
       btn.classList.add('active');
       currentCategory = btn.getAttribute('data-category');
-      load(currentRange, currentCategory);
+      load();
     });
   }
 
-  load(currentRange, currentCategory);
+  renderCategoryTabs();
+  load();
 })();
