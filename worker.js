@@ -120,13 +120,23 @@ async function fetchTrending(region, key) {
   return data.items.map(mapVideoItem);
 }
 
+// regionCode on search.list only means "viewable in that country," not
+// "popular there" — nearly everything is viewable everywhere, so on its own
+// it barely filters at all (confirmed: KR and US returned almost the same
+// globally-viral clips). relevanceLanguage is a much stronger signal since
+// it biases ranking toward that language's content; mapped per-region here
+// so only regions we have a language guess for get the extra bias.
+const REGION_LANGUAGE = { KR: 'ko' };
+
 async function fetchRecentPopular(region, days, key) {
   const publishedAfter = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   // YouTube's search.list quietly returns zero results when there's no q=
   // term at all, even with other filters set — q=%20 (a blank space) works
   // around this without actually biasing results toward a real keyword.
+  const relevanceLanguage = REGION_LANGUAGE[region];
   const searchUrl = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=viewCount&q=%20&regionCode=' +
-    region + '&publishedAfter=' + publishedAfter + '&maxResults=10&key=' + key;
+    region + (relevanceLanguage ? '&relevanceLanguage=' + relevanceLanguage : '') +
+    '&publishedAfter=' + publishedAfter + '&maxResults=10&key=' + key;
   const sr = await fetch(searchUrl);
   const sdata = await sr.json();
   if (!sdata.items) throw new Error(sdata.error ? sdata.error.message : 'no items');
@@ -145,7 +155,7 @@ async function handleYoutube(env, url) {
 
   const region = (url.searchParams.get('region') || 'KR').toUpperCase().slice(0, 2);
   const range = url.searchParams.get('range') || 'today';
-  const cacheKey = 'yt:' + region + ':' + range;
+  const cacheKey = 'yt:v2:' + region + ':' + range; // v2: relevanceLanguage fix invalidates old cached results
 
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
