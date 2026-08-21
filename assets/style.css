@@ -819,6 +819,7 @@ textarea.comment-field { resize: vertical; margin-top: 10px; }
 .data-table .cell-warn { color: var(--warn); font-weight: 700; }
 .data-table .cell-muted { color: var(--text-muted); }
 .data-table a.coin-link { color: var(--accent); text-decoration: none; }
+.data-table a.news-link { color: var(--accent); text-decoration: none; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 
 /* ---------- youtube trending pages ---------- */
 .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; margin-top: 20px; }

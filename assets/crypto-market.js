@@ -457,9 +457,16 @@
     }
   }
 
+  // no per-coin news matching (our RSS pool is only ~40 general items and
+  // won't have coverage for most small-cap movers) — link out to a live
+  // Google News search instead, which works for literally any coin name.
+  function newsSearchUrl(coinName) {
+    return 'https://news.google.com/search?q=' + encodeURIComponent(coinName + ' crypto') + '&hl=ko&gl=KR&ceid=KR:ko';
+  }
+
   function renderRankList(tbodyId, list, rate) {
     var el = document.getElementById(tbodyId);
-    if (!list.length) { el.innerHTML = '<tr><td colspan="4" class="loading-note">데이터가 없어요</td></tr>'; return; }
+    if (!list.length) { el.innerHTML = '<tr><td colspan="5" class="loading-note">데이터가 없어요</td></tr>'; return; }
     el.innerHTML = list.map(function (c) {
       var vol = c.total_volume || 0;
       var volText = fmtUsd(vol) + krwParen(vol, fmtKrw);
@@ -470,6 +477,7 @@
         '<td>' + priceText + '</td>' +
         '<td>' + pctSpan(c.price_change_percentage_24h) + '</td>' +
         '<td class="cell-muted">' + volText + '</td>' +
+        '<td><a class="news-link" href="' + newsSearchUrl(c.name) + '" target="_blank" rel="noopener">검색 →</a></td>' +
         '</tr>';
     }).join('');
   }
@@ -509,8 +517,8 @@
       setupRankSort(document.getElementById('topLosers').closest('table'), function () { return losersList; }, function () { return resolvedKrwRate; }, 'topLosers');
     })
     .catch(function () {
-      document.getElementById('topGainers').innerHTML = '<tr><td colspan="4" class="loading-note">불러오지 못했어요</td></tr>';
-      document.getElementById('topLosers').innerHTML = '<tr><td colspan="4" class="loading-note">불러오지 못했어요</td></tr>';
+      document.getElementById('topGainers').innerHTML = '<tr><td colspan="5" class="loading-note">불러오지 못했어요</td></tr>';
+      document.getElementById('topLosers').innerHTML = '<tr><td colspan="5" class="loading-note">불러오지 못했어요</td></tr>';
     });
 
   // builds a range-tab row inside an existing container and wires clicks
@@ -561,6 +569,70 @@
     })
     .catch(function () {
       ['tvlNow', 'tvl24h', 'tvl7d'].forEach(function (id) { document.getElementById(id).textContent = '불러오지 못함'; });
+    });
+
+  // ---- TVL ranking table (DeFiLlama protocols) — CEX reserves excluded, sortable ----
+  function tvlRankCellValue(p, key) {
+    switch (key) {
+      case 'name': return (p.name || '').toLowerCase();
+      case 'category': return (p.category || '').toLowerCase();
+      case 'tvl': return p.tvl || 0;
+      case 'change_1d': return p.change_1d || 0;
+      case 'change_7d': return p.change_7d || 0;
+      default: return 0;
+    }
+  }
+
+  function renderTvlRank(list) {
+    var el = document.getElementById('tvlRankBody');
+    if (!el) return;
+    if (!list.length) { el.innerHTML = '<tr><td colspan="5" class="loading-note">데이터가 없어요</td></tr>'; return; }
+    el.innerHTML = list.map(function (p) {
+      return '<tr>' +
+        '<td><div class="coin-cell"><strong>' + escapeHtml(p.name) + '</strong>' +
+          (p.symbol && p.symbol !== '-' ? '<span>' + escapeHtml(p.symbol.toUpperCase()) + '</span>' : '') +
+          '</div></td>' +
+        '<td class="cell-muted">' + escapeHtml(p.category || '-') + '</td>' +
+        '<td>' + fmtUsd(p.tvl) + '</td>' +
+        '<td>' + (typeof p.change_1d === 'number' ? pctSpan(p.change_1d) : '-') + '</td>' +
+        '<td>' + (typeof p.change_7d === 'number' ? pctSpan(p.change_7d) : '-') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  var tvlRankList = [];
+  fetch('https://api.llama.fi/protocols')
+    .then(function (r) { return r.json(); })
+    .then(function (protocols) {
+      tvlRankList = protocols
+        .filter(function (p) { return p.category !== 'CEX' && typeof p.tvl === 'number' && p.tvl > 0; })
+        .sort(function (a, b) { return b.tvl - a.tvl; })
+        .slice(0, 20);
+      renderTvlRank(tvlRankList);
+
+      var tvlRankTable = document.getElementById('tvlRankTable');
+      if (!tvlRankTable) return;
+      var sortKey = 'tvl', sortDir = -1;
+      tvlRankTable.querySelectorAll('th[data-sort]').forEach(function (th) {
+        th.addEventListener('click', function () {
+          var key = th.getAttribute('data-sort');
+          if (sortKey === key) sortDir = -sortDir; else { sortKey = key; sortDir = 1; }
+          tvlRankTable.querySelectorAll('th').forEach(function (t) {
+            t.classList.toggle('sorted', t === th);
+            var a = t.querySelector('.sort-arrow'); if (a) a.remove();
+          });
+          th.insertAdjacentHTML('beforeend', '<span class="sort-arrow">' + (sortDir === 1 ? '▲' : '▼') + '</span>');
+          var sorted = tvlRankList.slice().sort(function (a, b) {
+            var av = tvlRankCellValue(a, key), bv = tvlRankCellValue(b, key);
+            return av < bv ? -sortDir : av > bv ? sortDir : 0;
+          });
+          renderTvlRank(sorted);
+        });
+      });
+    })
+    .catch(function () {
+      var el = document.getElementById('tvlRankBody');
+      if (el) el.innerHTML = '<tr><td colspan="5" class="loading-note">불러오지 못했어요</td></tr>';
     });
 
   // ---- stablecoin market caps (proxy for USDT/USDC flow) — stats + chart with range tabs ----
