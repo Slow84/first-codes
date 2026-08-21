@@ -115,17 +115,27 @@ function mapVideoItem(item) {
 // "popular there" — nearly everything is viewable everywhere, so on its own
 // it barely filters at all (confirmed: KR and US returned almost the same
 // globally-viral clips). relevanceLanguage is a much stronger signal since
-// it biases ranking toward that language's content; mapped per-region here
-// so only regions we have a language guess for get the extra bias.
+// it biases ranking toward that language's content, but it's still only a
+// ranking hint, not a hard filter — confirmed on 2026-08-21 that KR category
+// tabs (sports/gaming/comedy/education especially) still leaked mostly
+// non-Korean results even with relevanceLanguage=ko.
 const REGION_LANGUAGE = { KR: 'ko', US: 'en' };
 
+// For regions where a script is a reliable proxy for "actually in this
+// region's language," hard-filter on it instead of trusting relevanceLanguage
+// alone — confirmed via direct API test this reliably keeps only genuine
+// Korean content. No such easy proxy for English (Latin script isn't
+// English-specific), so US/global still relies on relevanceLanguage only.
+const REGION_SCRIPT_FILTER = { KR: /[가-힣]/ };
+
 // YouTube's fixed videoCategoryId list — only the IDs actually offered as
-// tabs on the site. There's no "Kids" category in YouTube's own list (that's
-// an age flag, not a topic), so it's left out.
-const CATEGORY_IDS = {
-  news: '25', sports: '17', gaming: '20', music: '10',
-  entertainment: '24', comedy: '23', education: '27'
-};
+// tabs on the site. Started with 7 (news/sports/gaming/music/entertainment/
+// comedy/education) but sports/gaming/comedy/education were dropped after
+// testing: even with the Hangul filter, top-50-by-viewcount for those
+// categories in KR had ~1 genuinely Korean video, not enough to fill a
+// page. There's also no "Kids" category in YouTube's own list (that's an
+// age flag, not a topic).
+const CATEGORY_IDS = { news: '25', music: '10', entertainment: '24' };
 
 async function fetchRecentPopular(region, days, key, category) {
   const publishedAfter = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -134,19 +144,30 @@ async function fetchRecentPopular(region, days, key, category) {
   // around this without actually biasing results toward a real keyword.
   const relevanceLanguage = REGION_LANGUAGE[region];
   const categoryId = CATEGORY_IDS[category];
+  const scriptFilter = REGION_SCRIPT_FILTER[region];
   // Shorts go hyper-viral the same way in every country regardless of
   // language/region, which is what was drowning out real per-country
-  // differences (KR and US were returning nearly identical clips).
-  // videoDuration=medium (4-20 min) excludes Shorts and gets genuinely
-  // distinct, region-appropriate results — confirmed via direct API test.
-  const searchUrl = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=viewCount&q=%20&videoDuration=medium&regionCode=' +
+  // differences when there was no hard filter. Now that regions with a
+  // script filter get one, Shorts can stay in the pool — they matter for
+  // e.g. K-pop/reaction content — and get filtered for real instead. Regions
+  // without a script filter (US) still need videoDuration=medium since
+  // there's nothing else keeping global-viral Shorts out.
+  const maxResults = scriptFilter ? 50 : 10;
+  const searchUrl = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=viewCount&q=%20' +
+    (scriptFilter ? '' : '&videoDuration=medium') + '&regionCode=' +
     region + (relevanceLanguage ? '&relevanceLanguage=' + relevanceLanguage : '') +
     (categoryId ? '&videoCategoryId=' + categoryId : '') +
-    '&publishedAfter=' + publishedAfter + '&maxResults=10&key=' + key;
+    '&publishedAfter=' + publishedAfter + '&maxResults=' + maxResults + '&key=' + key;
   const sr = await fetch(searchUrl);
   const sdata = await sr.json();
   if (!sdata.items) throw new Error(sdata.error ? sdata.error.message : 'no items');
-  const ids = sdata.items.map(function (it) { return it.id.videoId; }).filter(Boolean).join(',');
+  let items = sdata.items;
+  if (scriptFilter) {
+    items = items.filter(function (it) {
+      return scriptFilter.test(it.snippet.title) || scriptFilter.test(it.snippet.channelTitle);
+    }).slice(0, 10);
+  }
+  const ids = items.map(function (it) { return it.id.videoId; }).filter(Boolean).join(',');
   if (!ids) return [];
 
   const videosUrl = 'https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=' + ids + '&key=' + key;
@@ -162,7 +183,7 @@ async function handleYoutube(env, url) {
   const region = (url.searchParams.get('region') || 'KR').toUpperCase().slice(0, 2);
   const range = url.searchParams.get('range') || 'today';
   const category = url.searchParams.get('category') || 'all';
-  const cacheKey = 'yt:v5:' + region + ':' + range + ':' + category; // v5: added category filter
+  const cacheKey = 'yt:v6:' + region + ':' + range + ':' + category; // v6: Hangul hard-filter for KR, dropped weak categories
 
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
