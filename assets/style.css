@@ -113,6 +113,15 @@ body:has(.hero-dark) .mega-link span { color: rgba(244, 244, 245, 0.55); }
 body:has(.hero-dark) .mega-icon { border-color: rgba(255, 255, 255, 0.22); color: #fff; }
 body:has(.hero-dark) .mega-foot { color: #a6a0ff; border-top-color: rgba(255, 255, 255, 0.14); }
 
+/* the mobile hamburger panel sits over the same transparent/wormhole topbar
+   but is appended outside .nav-links, so the override above never reached
+   it — in light theme var(--text) is near-black, unreadable over the
+   always-dark hero. Force the same white treatment here too. */
+body:has(.hero-dark) .mobile-panel a {
+  color: #fff;
+  border-bottom-color: rgba(255, 255, 255, 0.14);
+}
+
 .nav-inner {
   max-width: 1180px;
   margin: 0 auto;
