@@ -637,15 +637,30 @@
     return arr;
   }
 
+  // ticker-shaped fallback for protocols with no real token symbol —
+  // "Binance staked ETH" -> "BSE", "Coinbase Bridge" -> "CB", a lone
+  // single-word name just gets clipped to 4 letters ("Solstice" -> "SOLS").
+  function abbreviateName(name) {
+    var words = name.trim().split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+      return words.slice(0, 4).map(function (w) { return w[0]; }).join('').toUpperCase();
+    }
+    return (words[0] || '').slice(0, 4).toUpperCase();
+  }
+
   function computeTvlBubbleLayout(list, w, h) {
-    // radius ∝ sqrt(tvl) so *area* (not radius) is proportional to TVL —
-    // otherwise a 4x-bigger protocol would look 4x taller instead of 4x
-    // more area, which reads as a much bigger exaggeration to the eye.
-    // The exact scale (k) barely matters here since everything gets
-    // rescaled to fit the canvas afterward anyway — it just needs to be in
-    // the right ballpark so packing doesn't take forever.
-    var totalTvl = list.reduce(function (s, p) { return s + (p.tvl || 0); }, 0);
-    var k = Math.sqrt((0.5 * w * h) / (Math.PI * totalTvl));
+    // radius ∝ tvl^POWER. Pure area-proportional (POWER=0.5, i.e. sqrt) is
+    // the "honest" bubble-chart standard, but the user found it made
+    // mid-size protocols look too similar (e.g. a 2.6x TVL gap only became
+    // a 1.6x radius gap) — bumped to 0.65 per their explicit call, trading
+    // some of that strict-proportionality honesty for more visible spread
+    // between small/mid protocols. The exact scale (k) barely matters
+    // since everything gets rescaled to fit the canvas afterward anyway —
+    // it just needs to be in the right ballpark so packing doesn't take
+    // forever.
+    var SIZE_POWER = 0.65;
+    var sumPow = list.reduce(function (s, p) { return s + Math.pow(p.tvl || 1, SIZE_POWER * 2); }, 0);
+    var k = Math.sqrt((0.5 * w * h) / (Math.PI * sumPow));
     // checked against real data: with 100 protocols, a floor of 10 clamped
     // 44 of them to the exact same radius, erasing real TVL differences
     // among nearly half the dataset. Dropped to just enough to stay a
@@ -670,7 +685,7 @@
     var items = list.map(function (p) {
       return {
         name: p.name, tvl: p.tvl, slug: p.slug, symbol: p.symbol, change_1d: p.change_1d, change_7d: p.change_7d,
-        r: Math.max(minR, k * Math.sqrt(p.tvl)),
+        r: Math.max(minR, k * Math.pow(p.tvl || 1, SIZE_POWER)),
         sizeT: (Math.log(p.tvl || 1) - logMin) / logRange
       };
     });
@@ -757,10 +772,13 @@
       ctx.font = '700 ' + nameFont + 'px Inter, sans-serif';
       // ticker (e.g. "LDO") instead of full name — much shorter, so it
       // actually fits small circles instead of truncating almost
-      // everything to 2-3 letters + "…". Protocols with no token of their
-      // own (bridges, custody wrappers) have no symbol in DeFiLlama's data,
-      // so fall back to the name for those.
-      var label = (it.symbol && it.symbol !== '-') ? it.symbol.toUpperCase() : it.name;
+      // everything to 2-3 letters + "…". ~35% of top protocols have no
+      // token of their own (bridges, custody wrappers) and no symbol in
+      // DeFiLlama's data — falling back to their full name there looked
+      // visually inconsistent next to real tickers, so those get an
+      // initials-style abbreviation instead (e.g. "Binance staked ETH" ->
+      // "BSE"), keeping every label short and ticker-shaped.
+      var label = (it.symbol && it.symbol !== '-') ? it.symbol.toUpperCase() : abbreviateName(it.name);
       // truncate by measured width, not a fixed character count — a wide
       // name like "Binance staked ETH" (used as a fallback above) needs
       // cutting off much sooner than a short ticker does at the same
