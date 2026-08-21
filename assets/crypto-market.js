@@ -679,25 +679,14 @@
     // the base view and only grow (and gain a label) once zoomed in.
     var minR = 3;
 
-    // size color (green depth) and volatility color (red mix-in) each need
-    // to be relative to the *current dataset*, not an absolute scale, or
-    // one whale protocol would make everything else look identically pale.
-    // Size uses log scale since TVL spans orders of magnitude ($23B down to
-    // a few hundred M) — a linear scale would make everything past the top
-    // 2-3 protocols look the same pale shade.
-    var tvls = list.map(function (p) { return p.tvl || 1; });
-    var logMin = Math.log(Math.min.apply(null, tvls));
-    var logMax = Math.log(Math.max.apply(null, tvls));
-    var logRange = Math.max(1e-6, logMax - logMin);
-
-    // volatility color depends on which range (일/주) is selected, so it's
-    // computed per-frame in renderTvlBubbleFrame instead of baked in here —
-    // switching ranges is then just a redraw, not a re-layout.
+    // color (direction + magnitude of change) depends on which range (일/주)
+    // is selected, so it's computed per-frame in renderTvlBubbleFrame
+    // instead of baked in here — switching ranges is then just a redraw,
+    // not a re-layout. Circle size is the only thing TVL itself controls.
     var items = list.map(function (p) {
       return {
         name: p.name, tvl: p.tvl, slug: p.slug, symbol: p.symbol, change_1d: p.change_1d, change_7d: p.change_7d,
-        r: Math.max(minR, k * Math.pow(p.tvl || 1, SIZE_POWER)),
-        sizeT: (Math.log(p.tvl || 1) - logMin) / logRange
+        r: Math.max(minR, k * Math.pow(p.tvl || 1, SIZE_POWER))
       };
     });
     shuffle(items);
@@ -758,16 +747,17 @@
     // and hides it — every circle stays visible regardless of z-order luck.
     var drawOrder = tvlBubbleItems.slice().sort(function (a, b) { return b.r - a.r; });
     drawOrder.forEach(function (it) {
-      // hue runs green (150°, calm) -> red (0°, volatile) by how much the
-      // protocol's TVL moved recently (일/주 toggle picks which field);
-      // lightness runs pale -> deep by how big its TVL is. Two independent
-      // signals, one color, decoded at a glance: pale+green = small & calm,
-      // deep+red = big & volatile.
+      // color is entirely about the period's change now — direction picks
+      // the hue family (green = grew, red = shrank), magnitude picks how
+      // deep/saturated it is (barely moved = pale, swung hard = vivid).
+      // TVL size doesn't need its own color channel since circle size
+      // already shows it directly; doubling it into lightness too (the old
+      // scheme) just made the size/direction signals harder to read apart.
       var changeVal = tvlBubbleRange === '7d' ? (it.change_7d || 0) : (it.change_1d || 0);
-      var volT = Math.min(1, Math.abs(changeVal) / TVL_BUBBLE_VOL_CAP[tvlBubbleRange]);
-      var hue = 150 - 150 * volT;
-      var lightness = (isDark ? 62 : 82) - (isDark ? 30 : 45) * it.sizeT;
-      var saturation = 35 + 35 * it.sizeT;
+      var magT = Math.min(1, Math.abs(changeVal) / TVL_BUBBLE_VOL_CAP[tvlBubbleRange]);
+      var hue = changeVal >= 0 ? 150 : 5;
+      var lightness = (isDark ? 68 : 88) - (isDark ? 33 : 48) * magT;
+      var saturation = 30 + 50 * magT;
       ctx.beginPath();
       ctx.arc(it.x, it.y, it.r, 0, Math.PI * 2);
       ctx.fillStyle = 'hsla(' + hue + ',' + saturation + '%,' + lightness + '%,0.7)';
