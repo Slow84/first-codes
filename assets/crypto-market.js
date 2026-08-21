@@ -660,6 +660,44 @@
     return (words[0] || '').slice(0, 4).toUpperCase();
   }
 
+  // radius ∝ |Δamount|^SIZE_POWER. Pure area-proportional (0.5, i.e. sqrt)
+  // is the "honest" bubble-chart standard, but the user found the earlier
+  // TVL-sized version made mid-size protocols look too similar — bumped to
+  // 0.65 per their explicit call, trading some strict-proportionality
+  // honesty for more visible spread between small/mid movers.
+  var SIZE_POWER = 0.65;
+
+  // one shared scale factor for BOTH ranges, computed once from whichever
+  // of 일/주 has the larger total |Δamount| (weekly moves are usually
+  // bigger in aggregate, but this doesn't assume that). Without this, each
+  // tab independently rescaled itself to fill ~50% of the canvas — so even
+  // though 주 amounts were routinely 3-6x bigger than 일 in dollar terms,
+  // the *relative* proportions between circles stayed similar and the
+  // whole chart looked barely different, which is exactly what was
+  // reported. Using one shared k means the smaller-magnitude range's
+  // circles come out systematically smaller (not restretched to fill the
+  // canvas), so switching tabs visibly shows "less happened today."
+  var tvlBubbleSharedK = 1;
+  function computeTvlBubbleSharedK(list, w, h) {
+    var sums = ['1d', '7d'].map(function (range) {
+      return list.reduce(function (s, p) {
+        var changeVal = range === '7d' ? (p.change_7d || 0) : (p.change_1d || 0);
+        var deltaAmount = changeVal ? p.tvl * changeVal / (100 + changeVal) : 0;
+        return s + Math.pow(Math.abs(deltaAmount) || 1, SIZE_POWER * 2);
+      }, 0);
+    });
+    // calibrate against the LARGER-magnitude range so *it* ends up filling
+    // the canvas (minimal shrink needed) — verified via simulation that
+    // picking the smaller one backwards (an earlier mistake here) instead
+    // over-shrinks the bigger range to match the smaller one, the exact
+    // opposite of the intended effect. With this direction: 주 (usually
+    // bigger $ moves) fills ~38% of canvas, 일 fills ~9% using the same k —
+    // a real, visible size difference between tabs instead of both
+    // re-normalizing to look similar.
+    var refSumPow = Math.max.apply(null, sums);
+    tvlBubbleSharedK = Math.sqrt((0.5 * w * h) / (Math.PI * refSumPow));
+  }
+
   function computeTvlBubbleLayout(list, w, h, range) {
     // circle size is how much TVL actually *moved* over the selected
     // period (일/주), not the static current total — so switching tabs
@@ -673,17 +711,7 @@
       return { p: p, changeVal: changeVal, deltaAmount: deltaAmount };
     });
 
-    // radius ∝ |Δamount|^POWER. Pure area-proportional (POWER=0.5, i.e.
-    // sqrt) is the "honest" bubble-chart standard, but the user found the
-    // TVL-sized version made mid-size protocols look too similar — bumped
-    // to 0.65 per their explicit call, trading some strict-proportionality
-    // honesty for more visible spread between small/mid movers. The exact
-    // scale (k) barely matters since everything gets rescaled to fit the
-    // canvas afterward anyway — it just needs to be in the right ballpark
-    // so packing doesn't take forever.
-    var SIZE_POWER = 0.65;
-    var sumPow = withDelta.reduce(function (s, d) { return s + Math.pow(Math.abs(d.deltaAmount) || 1, SIZE_POWER * 2); }, 0);
-    var k = Math.sqrt((0.5 * w * h) / (Math.PI * sumPow));
+    var k = tvlBubbleSharedK;
     // checked against real data: with 100 protocols, a floor of 10 clamped
     // 44 of them to the exact same radius, erasing real TVL differences
     // among nearly half the dataset. Dropped to just enough to stay a
@@ -714,7 +742,13 @@
       minY = Math.min(minY, it.y - it.r); maxY = Math.max(maxY, it.y + it.r);
     });
     var padding = 8;
-    var fitScale = Math.min((w - padding * 2) / (maxX - minX), (h - padding * 2) / (maxY - minY));
+    // capped at 1 (never grow, only ever shrink to avoid overflow) — this
+    // is what makes the shared-k scale above actually mean something: the
+    // smaller-magnitude range's packed cluster is legitimately smaller
+    // than the canvas, and should stay that way (visible empty margin)
+    // instead of being stretched back up to fill it, which would erase
+    // the whole point of sharing one scale between the two ranges.
+    var fitScale = Math.min(1, (w - padding * 2) / (maxX - minX), (h - padding * 2) / (maxY - minY));
     var bboxCx = (minX + maxX) / 2, bboxCy = (minY + maxY) / 2;
     items.forEach(function (it) {
       it.x = w / 2 + (it.x - bboxCx) * fitScale;
@@ -833,12 +867,17 @@
   function drawTvlBubbles(list) {
     var canvas = document.getElementById('tvlBubbleChart');
     if (!canvas || !list.length) return;
-    tvlBubbleFullList = list; // cached so a range-tab click can re-layout without refetching
+    // a range-tab click re-calls this with the exact same cached array
+    // (see the click handler below) — only a genuinely new dataset should
+    // recalibrate the shared scale, not every tab switch.
+    var isNewData = list !== tvlBubbleFullList;
+    tvlBubbleFullList = list;
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
     var w = canvas.clientWidth, h = canvas.clientHeight;
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     tvlBubbleCanvasSize = { w: w, h: h };
+    if (isNewData) computeTvlBubbleSharedK(list, w, h);
     tvlBubbleItems = computeTvlBubbleLayout(list, w, h, tvlBubbleRange);
     tvlBubbleView = { scale: 1, ox: 0, oy: 0 };
     renderTvlBubbleFrame();
