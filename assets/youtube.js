@@ -1,10 +1,13 @@
 (function () {
   var grid = document.getElementById('videoGrid');
-  var tabsEl = document.querySelector('.tabs');
-  if (!grid || !tabsEl) return;
+  var rangeTabsEl = document.getElementById('rangeTabs');
+  var categoryTabsEl = document.getElementById('categoryTabs');
+  if (!grid || !rangeTabsEl) return;
 
   var region = document.body.getAttribute('data-yt-region') || 'KR';
-  var cache = {}; // range -> videos, so switching tabs back doesn't refetch
+  var cache = {}; // "range:category" -> videos, so switching tabs back doesn't refetch
+  var currentRange = 'today';
+  var currentCategory = 'all';
 
   function escapeHtml(s) {
     var div = document.createElement('div');
@@ -36,28 +39,41 @@
     }).join('');
   }
 
-  function load(range) {
-    if (cache[range]) { renderVideos(cache[range]); return; }
+  function load(range, category) {
+    var key = range + ':' + category;
+    if (cache[key]) { renderVideos(cache[key]); return; }
     grid.innerHTML = '<p class="loading-note">불러오는 중...</p>';
-    fetch('/api/yt?region=' + encodeURIComponent(region) + '&range=' + encodeURIComponent(range))
+    fetch('/api/yt?region=' + encodeURIComponent(region) + '&range=' + encodeURIComponent(range) + '&category=' + encodeURIComponent(category))
       .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
       .then(function (res) {
         if (!res.ok) throw new Error(res.data.error || 'failed');
-        cache[range] = res.data.videos || [];
-        renderVideos(cache[range]);
+        cache[key] = res.data.videos || [];
+        renderVideos(cache[key]);
       })
       .catch(function () {
         grid.innerHTML = '<p class="loading-note">불러오지 못했어요. 잠시 후 다시 시도해주세요.</p>';
       });
   }
 
-  tabsEl.addEventListener('click', function (e) {
+  rangeTabsEl.addEventListener('click', function (e) {
     var btn = e.target.closest('.tab-btn');
     if (!btn) return;
-    tabsEl.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+    rangeTabsEl.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
     btn.classList.add('active');
-    load(btn.getAttribute('data-range'));
+    currentRange = btn.getAttribute('data-range');
+    load(currentRange, currentCategory);
   });
 
-  load('today');
+  if (categoryTabsEl) {
+    categoryTabsEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('.tab-btn');
+      if (!btn) return;
+      categoryTabsEl.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      currentCategory = btn.getAttribute('data-category');
+      load(currentRange, currentCategory);
+    });
+  }
+
+  load(currentRange, currentCategory);
 })();

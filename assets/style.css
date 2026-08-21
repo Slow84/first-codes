@@ -599,10 +599,11 @@ body:has(.hero-dark) .mega-foot { color: #a6a0ff; border-top-color: rgba(255, 25
 }
 
 .tabs {
-  display: inline-flex; background: var(--bg-soft); padding: 4px; border-radius: 999px; gap: 2px; margin-bottom: 18px;
+  display: inline-flex; flex-wrap: wrap; background: var(--bg-soft); padding: 4px; border-radius: 999px; gap: 2px; margin-bottom: 18px;
 }
-.tab-btn { background: transparent; border: none; color: var(--text); font-size: 13.5px; font-weight: 700; padding: 9px 18px; border-radius: 999px; cursor: pointer; }
+.tab-btn { background: transparent; border: none; color: var(--text); font-size: 13.5px; font-weight: 700; padding: 9px 18px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
 .tab-btn.active { background: var(--bg); box-shadow: 0 2px 8px rgba(18,18,18,0.08); }
+.tabs-category .tab-btn { font-size: 12.5px; padding: 7px 13px; }
 
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }

@@ -119,12 +119,21 @@ function mapVideoItem(item) {
 // so only regions we have a language guess for get the extra bias.
 const REGION_LANGUAGE = { KR: 'ko', US: 'en' };
 
-async function fetchRecentPopular(region, days, key) {
+// YouTube's fixed videoCategoryId list — only the IDs actually offered as
+// tabs on the site. There's no "Kids" category in YouTube's own list (that's
+// an age flag, not a topic), so it's left out.
+const CATEGORY_IDS = {
+  news: '25', sports: '17', gaming: '20', music: '10',
+  entertainment: '24', comedy: '23', education: '27'
+};
+
+async function fetchRecentPopular(region, days, key, category) {
   const publishedAfter = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   // YouTube's search.list quietly returns zero results when there's no q=
   // term at all, even with other filters set — q=%20 (a blank space) works
   // around this without actually biasing results toward a real keyword.
   const relevanceLanguage = REGION_LANGUAGE[region];
+  const categoryId = CATEGORY_IDS[category];
   // Shorts go hyper-viral the same way in every country regardless of
   // language/region, which is what was drowning out real per-country
   // differences (KR and US were returning nearly identical clips).
@@ -132,6 +141,7 @@ async function fetchRecentPopular(region, days, key) {
   // distinct, region-appropriate results — confirmed via direct API test.
   const searchUrl = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=viewCount&q=%20&videoDuration=medium&regionCode=' +
     region + (relevanceLanguage ? '&relevanceLanguage=' + relevanceLanguage : '') +
+    (categoryId ? '&videoCategoryId=' + categoryId : '') +
     '&publishedAfter=' + publishedAfter + '&maxResults=10&key=' + key;
   const sr = await fetch(searchUrl);
   const sdata = await sr.json();
@@ -151,7 +161,8 @@ async function handleYoutube(env, url) {
 
   const region = (url.searchParams.get('region') || 'KR').toUpperCase().slice(0, 2);
   const range = url.searchParams.get('range') || 'today';
-  const cacheKey = 'yt:v4:' + region + ':' + range; // v4: "today" switched from mostPopular chart to a 2-day view-count search
+  const category = url.searchParams.get('category') || 'all';
+  const cacheKey = 'yt:v5:' + region + ':' + range + ':' + category; // v5: added category filter
 
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
@@ -165,7 +176,7 @@ async function handleYoutube(env, url) {
   const RANGE_DAYS = { today: 2, week: 7, month: 30 };
   let videos;
   try {
-    videos = await fetchRecentPopular(region, RANGE_DAYS[range] || 7, env.YOUTUBE_API_KEY);
+    videos = await fetchRecentPopular(region, RANGE_DAYS[range] || 7, env.YOUTUBE_API_KEY, category);
   } catch (e) {
     return json({ error: '유튜브 데이터를 가져오지 못했어요.' }, 502);
   }
