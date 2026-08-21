@@ -111,15 +111,6 @@ function mapVideoItem(item) {
   };
 }
 
-async function fetchTrending(region, key) {
-  const u = 'https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=' +
-    region + '&maxResults=10&key=' + key;
-  const r = await fetch(u);
-  const data = await r.json();
-  if (!data.items) throw new Error(data.error ? data.error.message : 'no items');
-  return data.items.map(mapVideoItem);
-}
-
 // regionCode on search.list only means "viewable in that country," not
 // "popular there" — nearly everything is viewable everywhere, so on its own
 // it barely filters at all (confirmed: KR and US returned almost the same
@@ -160,15 +151,21 @@ async function handleYoutube(env, url) {
 
   const region = (url.searchParams.get('region') || 'KR').toUpperCase().slice(0, 2);
   const range = url.searchParams.get('range') || 'today';
-  const cacheKey = 'yt:v3:' + region + ':' + range; // v3: exclude Shorts (videoDuration=medium) invalidates old cached results
+  const cacheKey = 'yt:v4:' + region + ':' + range; // v4: "today" switched from mostPopular chart to a 2-day view-count search
 
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
+  // "today" used to be YouTube's own chart=mostPopular (its curated trending
+  // list), but that barely changes hour to hour, let alone day to day. A
+  // strict last-24h window ranked by view count was tested and was too
+  // noisy (too few candidates, so odd/off-region videos won by default) —
+  // 2 days struck the right balance in testing: still moves daily as new
+  // videos accumulate views, but has enough candidates to rank meaningfully.
+  const RANGE_DAYS = { today: 2, week: 7, month: 30 };
   let videos;
   try {
-    if (range === 'today') videos = await fetchTrending(region, env.YOUTUBE_API_KEY);
-    else videos = await fetchRecentPopular(region, range === 'week' ? 7 : 30, env.YOUTUBE_API_KEY);
+    videos = await fetchRecentPopular(region, RANGE_DAYS[range] || 7, env.YOUTUBE_API_KEY);
   } catch (e) {
     return json({ error: '유튜브 데이터를 가져오지 못했어요.' }, 502);
   }
