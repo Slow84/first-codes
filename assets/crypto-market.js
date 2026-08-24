@@ -712,19 +712,26 @@
     });
 
     var k = tvlBubbleSharedK;
-    // checked against real data: with 100 protocols, a floor of 10 clamped
-    // 44 of them to the exact same radius, erasing real TVL differences
-    // among nearly half the dataset. Dropped to just enough to stay a
-    // visible, tappable dot — small protocols are *meant* to look tiny at
-    // the base view and only grow (and gain a label) once zoomed in.
-    var minR = 3;
+    // radius floor added *in quadrature* (√(r²+floor²)), not a hard
+    // Math.max clamp — a hard clamp was tried twice (once pre-fit, once
+    // post-fit) and both times collapsed every circle already under the
+    // floor to the exact same size, recreating the "everything looks the
+    // same" complaint each time. Quadrature guarantees the same minimum
+    // at r=0 while staying strictly monotonic, so differently-sized small
+    // movers still come out differently sized. Applied *before* packing
+    // (not after fitting, which was also tried) so the packer itself
+    // reserves the right amount of space for the boosted sizes — applying
+    // it after packing caused real overlaps, since neighbors' gaps had
+    // only been sized for their smaller pre-floor radii.
+    var SOFT_MIN_R = 10;
 
     var items = withDelta.map(function (d) {
       var p = d.p;
+      var raw = k * Math.pow(Math.abs(d.deltaAmount) || 1, SIZE_POWER);
       return {
         name: p.name, tvl: p.tvl, slug: p.slug, symbol: p.symbol,
         changeVal: d.changeVal, deltaAmount: d.deltaAmount,
-        r: Math.max(minR, k * Math.pow(Math.abs(d.deltaAmount) || 1, SIZE_POWER))
+        r: Math.sqrt(raw * raw + SOFT_MIN_R * SOFT_MIN_R)
       };
     });
     shuffle(items);
@@ -756,28 +763,15 @@
       it.r = it.r * fitScale;
     });
 
-    // the pre-fit minR (3) was supposed to guarantee every circle stays a
-    // visible dot, but fitScale can be well under 1 for the smaller-
-    // magnitude range now (that's the whole point of the shared-k change)
-    // — checked against live data and on a quiet 일 tab, fitScale ≈0.27
-    // shrank the pre-fit floor down to ~0.8px, needing ~40x zoom to ever
-    // become legible. A floor applied *after* fitScale guarantees a real
-    // minimum on-screen size no matter how much the range as a whole got
-    // shrunk relative to the reference.
-    var POST_FIT_MIN_R = 4;
-    items.forEach(function (it) { it.r = Math.max(it.r, POST_FIT_MIN_R); });
-
-    // zoom ceiling is now just "how far to zoom so the smallest circle
-    // (guaranteed >= POST_FIT_MIN_R) becomes comfortably legible" — a
-    // predictable, dataset-independent number, unlike deriving it from the
-    // biggest circle (tried that — it made max zoom *too tight* to ever
-    // reveal small circles' labels, since the biggest and smallest could
-    // be 10-20x apart in radius). Zooming in on the biggest circle at this
-    // ceiling can now exceed the viewport, same as zooming into any one
-    // feature on a map — that's expected once you're panning, not the
-    // "swallows everything even at a glance" bug from before, since
-    // reaching this zoom always takes a deliberate pinch/scroll.
-    tvlBubbleMaxScale = 32 / POST_FIT_MIN_R;
+    // zoom ceiling: how far to zoom so the *actual smallest circle in this
+    // layout* becomes comfortably legible (~32px apparent). Derived from
+    // the real post-fit minimum rather than a fixed assumption, since
+    // SOFT_MIN_R's effect after fitScale varies by range. Zooming in on
+    // the biggest circle at this ceiling can exceed the viewport if
+    // panned onto it — expected "zoomed into one map feature" behavior
+    // once the user deliberately zooms that far, not a default-view bug.
+    var minFinalR = Math.min.apply(null, items.map(function (it) { return it.r; }));
+    tvlBubbleMaxScale = Math.max(2, Math.min(10, 32 / minFinalR));
     return items;
   }
 
@@ -833,11 +827,14 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle'; // so fillText's y is each line's own visual center, not its alphabetic baseline — makes symmetric stacking around it.y exact instead of approximate
       ctx.fillStyle = isDark ? '#fff' : '#18181b';
-      // no artificial floor — font tracks circle size directly, so a small
-      // circle's text starts small too (readable only once zoomed in
-      // enough) instead of being forced to a minimum that overflows a
-      // circle much smaller than the floor was designed for.
-      var nameFont = Math.min(13, it.r / 3.4);
+      // a small font floor here is safe now (it wasn't before the circle
+      // radius itself had a guaranteed minimum) — the width-based
+      // truncation below still protects against overflow by shortening
+      // the *string*, not the font, so a small circle just shows fewer
+      // characters instead of bleeding into its neighbor. Without this
+      // floor, the smallest circles (r≈4) rendered a ~1px font that
+      // stayed unreadable even zoomed all the way to the 8x ceiling.
+      var nameFont = Math.max(2.4, Math.min(13, it.r / 3.4));
       ctx.font = '700 ' + nameFont + 'px Inter, sans-serif';
       // ticker (e.g. "LDO") instead of full name — much shorter, so it
       // actually fits small circles instead of truncating almost
@@ -863,7 +860,7 @@
       // how much TVL actually moved over the selected period — also
       // precomputed in the layout step now that it drives circle size too.
       var deltaAmount = it.deltaAmount;
-      var valueFont = Math.min(11, it.r / 4.6);
+      var valueFont = Math.max(1.9, Math.min(11, it.r / 4.6));
       // no floor and no arbitrary offset here either — gap is purely each
       // line's own half-height plus a hair of breathing room, so the pair
       // stays tight and perfectly centered on it.y at any circle size.
