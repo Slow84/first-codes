@@ -696,10 +696,12 @@
     // the canvas (minimal shrink needed) — verified via simulation that
     // picking the smaller one backwards (an earlier mistake here) instead
     // over-shrinks the bigger range to match the smaller one, the exact
-    // opposite of the intended effect. With this direction: 주 (usually
-    // bigger $ moves) fills ~38% of canvas, 일 fills ~9% using the same k —
-    // a real, visible size difference between tabs instead of both
-    // re-normalizing to look similar.
+    // opposite of the intended effect. With this direction the range with
+    // bigger $ moves that day genuinely fills more of the canvas than the
+    // other — re-verified 2026-08-24 against live data (that day: 7d 77%
+    // filled vs 1d 19% filled). Exact numbers move with the market day to
+    // day; what matters is the two ranges stay visibly different sizes
+    // instead of both re-normalizing to look similar.
     var refSumPow = Math.max.apply(null, sums);
     tvlBubbleSharedK = Math.sqrt((0.5 * w * h) / (Math.PI * refSumPow));
   }
@@ -850,11 +852,19 @@
     // which is the whole point of being able to zoom into a small circle.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     var scale = tvlBubbleView.scale, ox = tvlBubbleView.ox, oy = tvlBubbleView.oy;
+    // 26px is the normal "comfortably legible without zooming" gate, but on
+    // a quiet day the 일 tab's biggest mover can be well under that (e.g.
+    // 18.5px when the day's biggest swing is modest) — a flat 26px cutoff
+    // then hides EVERY label, including the single biggest circle, which
+    // reads as broken rather than "nothing moved much today." drawOrder is
+    // sorted biggest-first, so drawOrder[0].r is this layout's own max —
+    // scale the gate down to 90% of that (never above 26) so the biggest
+    // circle in whichever tab is active always gets a label by default.
+    var layoutMaxApparentR = (drawOrder.length ? drawOrder[0].r : 0) * scale;
+    var textGate = Math.min(26, layoutMaxApparentR * 0.9);
     drawOrder.forEach(function (it) {
       var apparentR = it.r * scale;
-      // same 26px legibility gate as before, just expressed directly in
-      // screen pixels now instead of world-r-times-scale.
-      if (apparentR < 26) return;
+      if (apparentR < textGate) return;
       var screenX = it.x * scale + ox;
       var screenY = it.y * scale + oy;
 
