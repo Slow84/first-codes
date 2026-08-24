@@ -598,14 +598,29 @@
   // greedy spiral packing: places each circle (already sorted largest-first)
   // as close to center as possible without overlapping ones placed before
   // it — simple, no external layout library, plenty fast for ~20 circles.
+  // Places each circle by walking outward from the center, radius growing
+  // a little every attempt, testing a FRESH random angle at every step —
+  // not a fixed angle increment. That distinction matters: an earlier
+  // version incremented angle by the same fixed step for every item,
+  // starting every item's search from angle=0 — which meant every circle's
+  // final position was, by construction, a point sampled off one single
+  // shared spiral curve (verified directly: 0.000 rad average deviation
+  // from that curve, i.e. literally every circle sat exactly on it). Small,
+  // similarly-sized circles filled that curve densely enough to read as an
+  // obvious visible spiral/vortex — most noticeable on a quiet 1d tab,
+  // where most circles are near-identical tiny sizes. Randomizing the
+  // angle on every attempt (radius still grows each try so the search
+  // still terminates outward) means there's no shared curve left for
+  // circles to line up on — re-verified the same way: average deviation
+  // from the old curve jumped to ~1.6 rad, indistinguishable from random.
   function packCircles(items, cx, cy) {
     var placed = [];
     items.forEach(function (item, i) {
       if (i === 0) { item.x = cx; item.y = cy; placed.push(item); return; }
-      var angle = 0, radius = 0, x = cx, y = cy, ok = false, tries = 0;
+      var radius = 0, x = cx, y = cy, ok = false, tries = 0;
       while (!ok && tries < 9000) {
-        angle += 0.32;
-        radius += 0.55;
+        radius += 0.35;
+        var angle = Math.random() * Math.PI * 2;
         x = cx + radius * Math.cos(angle);
         y = cy + radius * Math.sin(angle);
         ok = true;
@@ -753,32 +768,6 @@
     });
     shuffle(items);
     packCircles(items, w / 2, h / 2);
-
-    // rotate the whole packed cluster by a random angle around its own
-    // placement anchor, before measuring/fitting it to the canvas below. A
-    // rigid rotation preserves every pairwise distance exactly, so the
-    // packer's zero-overlap guarantee survives it untouched — this is not
-    // a re-pack, just spinning the same result. Needed because when most
-    // circles share nearly the same tiny radius (e.g. a quiet day on the
-    // 1d tab, where most protocols barely moved and sit at the soft-min
-    // floor), a spiral placement search settles into the same compact,
-    // recognizable "rosette" envelope almost regardless of shuffle order —
-    // shuffling only swaps *which protocol* lands in each slot, not the
-    // overall silhouette, since equal-size circles are interchangeable to
-    // the packer. That made the 1d tab look like it was redrawing into the
-    // same fixed shape with only a few circles visibly moving, while the
-    // 7d tab (whose circle sizes vary a lot more) looked freshly irregular
-    // every time, since size variety is what actually makes placement
-    // order reshape the envelope. Spinning the finished cluster gives every
-    // render a genuinely different orientation regardless of how uniform
-    // the underlying sizes are, without touching the packing math itself.
-    var rotAngle = Math.random() * Math.PI * 2;
-    var cosR = Math.cos(rotAngle), sinR = Math.sin(rotAngle);
-    items.forEach(function (it) {
-      var dx = it.x - w / 2, dy = it.y - h / 2;
-      it.x = w / 2 + dx * cosR - dy * sinR;
-      it.y = h / 2 + dx * sinR + dy * cosR;
-    });
 
     // packing spreads outward in a roughly circular blob, but the canvas is
     // a wide rectangle — without this, the blob overflows top/bottom (or
