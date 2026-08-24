@@ -754,6 +754,32 @@
     shuffle(items);
     packCircles(items, w / 2, h / 2);
 
+    // rotate the whole packed cluster by a random angle around its own
+    // placement anchor, before measuring/fitting it to the canvas below. A
+    // rigid rotation preserves every pairwise distance exactly, so the
+    // packer's zero-overlap guarantee survives it untouched — this is not
+    // a re-pack, just spinning the same result. Needed because when most
+    // circles share nearly the same tiny radius (e.g. a quiet day on the
+    // 1d tab, where most protocols barely moved and sit at the soft-min
+    // floor), a spiral placement search settles into the same compact,
+    // recognizable "rosette" envelope almost regardless of shuffle order —
+    // shuffling only swaps *which protocol* lands in each slot, not the
+    // overall silhouette, since equal-size circles are interchangeable to
+    // the packer. That made the 1d tab look like it was redrawing into the
+    // same fixed shape with only a few circles visibly moving, while the
+    // 7d tab (whose circle sizes vary a lot more) looked freshly irregular
+    // every time, since size variety is what actually makes placement
+    // order reshape the envelope. Spinning the finished cluster gives every
+    // render a genuinely different orientation regardless of how uniform
+    // the underlying sizes are, without touching the packing math itself.
+    var rotAngle = Math.random() * Math.PI * 2;
+    var cosR = Math.cos(rotAngle), sinR = Math.sin(rotAngle);
+    items.forEach(function (it) {
+      var dx = it.x - w / 2, dy = it.y - h / 2;
+      it.x = w / 2 + dx * cosR - dy * sinR;
+      it.y = h / 2 + dx * sinR + dy * cosR;
+    });
+
     // packing spreads outward in a roughly circular blob, but the canvas is
     // a wide rectangle — without this, the blob overflows top/bottom (or
     // left/right) and edge circles get cut off. Measure the actual bounding
