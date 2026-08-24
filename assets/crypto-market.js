@@ -723,7 +723,16 @@
     // reserves the right amount of space for the boosted sizes — applying
     // it after packing caused real overlaps, since neighbors' gaps had
     // only been sized for their smaller pre-floor radii.
-    var SOFT_MIN_R = 10;
+    // lowered from 10 to 2 per feedback: at 10, two genuinely different
+    // small movers (e.g. $135M vs $39M, a real 3.5x gap) came out looking
+    // like near-identical circles, because the floor term dominated the
+    // quadrature sum for anything with a small raw radius. At 2, small
+    // circles stay small (down to near-invisible dots for the tiniest
+    // movers) and real differences between them show through — the
+    // tradeoff is those tiniest circles need much more zoom to read,
+    // which is the explicitly requested direction (no upper zoom limit
+    // was wanted either — see tvlBubbleMaxScale below).
+    var SOFT_MIN_R = 2;
 
     var items = withDelta.map(function (d) {
       var p = d.p;
@@ -765,13 +774,15 @@
 
     // zoom ceiling: how far to zoom so the *actual smallest circle in this
     // layout* becomes comfortably legible (~32px apparent). Derived from
-    // the real post-fit minimum rather than a fixed assumption, since
-    // SOFT_MIN_R's effect after fitScale varies by range. Zooming in on
-    // the biggest circle at this ceiling can exceed the viewport if
-    // panned onto it — expected "zoomed into one map feature" behavior
-    // once the user deliberately zooms that far, not a default-view bug.
+    // the real post-fit minimum rather than a fixed assumption. No tight
+    // upper limit per feedback (small circles should stay reachable even
+    // if that takes real zoom, not be capped early) — 60x is just a
+    // sanity ceiling against a degenerate near-zero minFinalR, not a
+    // target. Zooming in on the biggest circle at this ceiling can exceed
+    // the viewport if panned onto it — expected "zoomed into one map
+    // feature" behavior once the user deliberately zooms that far.
     var minFinalR = Math.min.apply(null, items.map(function (it) { return it.r; }));
-    tvlBubbleMaxScale = Math.max(2, Math.min(10, 32 / minFinalR));
+    tvlBubbleMaxScale = Math.max(2, Math.min(60, 32 / minFinalR));
     return items;
   }
 
