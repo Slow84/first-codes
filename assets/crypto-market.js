@@ -756,15 +756,28 @@
       it.r = it.r * fitScale;
     });
 
-    // derive the zoom ceiling from the actual biggest circle instead of a
-    // guessed constant — this is what a flat 6x got wrong: it never checked
-    // whether the *biggest* protocol's circle would still fit at max zoom,
-    // only whether the smallest one became legible. Capping so the biggest
-    // circle's diameter can't exceed ~92% of the canvas's short side means
-    // it can never swallow the whole viewport (and everything next to it)
-    // no matter how the TVL distribution shifts day to day.
-    var maxR = Math.max.apply(null, items.map(function (it) { return it.r; }));
-    tvlBubbleMaxScale = Math.max(1.5, Math.min(6, (Math.min(w, h) * 0.92) / (2 * maxR)));
+    // the pre-fit minR (3) was supposed to guarantee every circle stays a
+    // visible dot, but fitScale can be well under 1 for the smaller-
+    // magnitude range now (that's the whole point of the shared-k change)
+    // — checked against live data and on a quiet 일 tab, fitScale ≈0.27
+    // shrank the pre-fit floor down to ~0.8px, needing ~40x zoom to ever
+    // become legible. A floor applied *after* fitScale guarantees a real
+    // minimum on-screen size no matter how much the range as a whole got
+    // shrunk relative to the reference.
+    var POST_FIT_MIN_R = 4;
+    items.forEach(function (it) { it.r = Math.max(it.r, POST_FIT_MIN_R); });
+
+    // zoom ceiling is now just "how far to zoom so the smallest circle
+    // (guaranteed >= POST_FIT_MIN_R) becomes comfortably legible" — a
+    // predictable, dataset-independent number, unlike deriving it from the
+    // biggest circle (tried that — it made max zoom *too tight* to ever
+    // reveal small circles' labels, since the biggest and smallest could
+    // be 10-20x apart in radius). Zooming in on the biggest circle at this
+    // ceiling can now exceed the viewport, same as zooming into any one
+    // feature on a map — that's expected once you're panning, not the
+    // "swallows everything even at a glance" bug from before, since
+    // reaching this zoom always takes a deliberate pinch/scroll.
+    tvlBubbleMaxScale = 32 / POST_FIT_MIN_R;
     return items;
   }
 
