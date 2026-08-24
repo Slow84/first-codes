@@ -76,9 +76,15 @@
   function fmtUsd(n) {
     var neg = n < 0; n = Math.abs(n);
     var s;
+    // was only ever exercised with large aggregates (market caps, TVL
+    // totals) before, so the "else" branch below 1M never got a K tier
+    // and just printed the raw number — harmless until the bubble
+    // chart's $-delta feature started feeding it small day-over-day
+    // amounts (e.g. -$71,775.787, decimals and all).
     if (n >= 1e9) s = (n / 1e9).toFixed(2) + 'B';
     else if (n >= 1e6) s = (n / 1e6).toFixed(1) + 'M';
-    else s = n.toLocaleString();
+    else if (n >= 1e3) s = (n / 1e3).toFixed(1) + 'K';
+    else s = Math.round(n).toLocaleString();
     return (neg ? '-$' : '$') + s;
   }
 
@@ -828,24 +834,34 @@
       ctx.lineWidth = 1.5 / tvlBubbleView.scale;
       ctx.strokeStyle = 'hsl(' + hue + ',' + saturation + '%,' + Math.max(18, lightness - 20) + '%)';
       ctx.stroke();
+    });
 
-      // gate on the *apparent* (zoomed) size, not the raw world radius —
-      // otherwise a circle that's tiny in the base layout stays textless
-      // forever even after zooming in far enough to make it huge on screen.
-      // Threshold is a bit higher than the old 20 to leave breathing room
-      // between adjacent labeled circles once many are visible at once.
-      if (it.r * tvlBubbleView.scale < 26) return;
+    // text is drawn in a *second pass, in screen space* (transform reset
+    // to just the device-pixel-ratio) instead of inside the zoomed
+    // transform above. Drawing it inside the zoomed transform (the first
+    // version of this) meant the text-width budget was always exactly
+    // proportional to the circle's *world* radius — zooming in scaled the
+    // circle and its text budget by the same factor, so the ratio between
+    // them never changed and a circle stuck showing "L…" kept showing
+    // "L…" no matter how far in you zoomed. Computing each circle's
+    // on-screen (apparent) position/size here and sizing the font/width
+    // budget from *that* instead means zooming in genuinely grows the
+    // available text budget, revealing more of the ticker as you zoom —
+    // which is the whole point of being able to zoom into a small circle.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var scale = tvlBubbleView.scale, ox = tvlBubbleView.ox, oy = tvlBubbleView.oy;
+    drawOrder.forEach(function (it) {
+      var apparentR = it.r * scale;
+      // same 26px legibility gate as before, just expressed directly in
+      // screen pixels now instead of world-r-times-scale.
+      if (apparentR < 26) return;
+      var screenX = it.x * scale + ox;
+      var screenY = it.y * scale + oy;
+
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle'; // so fillText's y is each line's own visual center, not its alphabetic baseline — makes symmetric stacking around it.y exact instead of approximate
       ctx.fillStyle = isDark ? '#fff' : '#18181b';
-      // a small font floor here is safe now (it wasn't before the circle
-      // radius itself had a guaranteed minimum) — the width-based
-      // truncation below still protects against overflow by shortening
-      // the *string*, not the font, so a small circle just shows fewer
-      // characters instead of bleeding into its neighbor. Without this
-      // floor, the smallest circles (r≈4) rendered a ~1px font that
-      // stayed unreadable even zoomed all the way to the 8x ceiling.
-      var nameFont = Math.max(2.4, Math.min(13, it.r / 3.4));
+      var nameFont = Math.max(9, Math.min(34, apparentR / 3.4));
       ctx.font = '700 ' + nameFont + 'px Inter, sans-serif';
       // ticker (e.g. "LDO") instead of full name — much shorter, so it
       // actually fits small circles instead of truncating almost
@@ -859,9 +875,10 @@
       // truncate by measured width, not a fixed character count — a wide
       // name like "Binance staked ETH" (used as a fallback above) needs
       // cutting off much sooner than a short ticker does at the same
-      // circle size. Kept tighter than the circle's full width so adjacent
-      // (touching) circles' labels don't bleed into each other.
-      var maxTextWidth = it.r * 1.4;
+      // circle size. Budget is now in screen pixels (apparentR-based), so
+      // it actually grows as you zoom in, instead of staying a fixed
+      // fraction of a radius that scales in lockstep with the circle.
+      var maxTextWidth = apparentR * 1.4;
       if (ctx.measureText(label).width > maxTextWidth) {
         while (label.length > 1 && ctx.measureText(label + '…').width > maxTextWidth) {
           label = label.slice(0, -1);
@@ -871,17 +888,14 @@
       // how much TVL actually moved over the selected period — also
       // precomputed in the layout step now that it drives circle size too.
       var deltaAmount = it.deltaAmount;
-      var valueFont = Math.max(1.9, Math.min(11, it.r / 4.6));
-      // no floor and no arbitrary offset here either — gap is purely each
-      // line's own half-height plus a hair of breathing room, so the pair
-      // stays tight and perfectly centered on it.y at any circle size.
+      var valueFont = Math.max(7.5, Math.min(28, apparentR / 4.6));
       var lineGap = nameFont * 0.5 + valueFont * 0.5 + 1;
-      ctx.fillText(label, it.x, it.y - lineGap / 2);
+      ctx.fillText(label, screenX, screenY - lineGap / 2);
       ctx.font = '600 ' + valueFont + 'px Inter, sans-serif';
       // direction (grew/shrank) shown via text color here, separate from
       // the circle's own hue (which encodes |change| magnitude, not sign)
       ctx.fillStyle = deltaAmount >= 0 ? (cssVar('--good') || '#1F7A4C') : (cssVar('--warn') || '#B23A2E');
-      ctx.fillText(fmtUsdSigned(deltaAmount), it.x, it.y + lineGap / 2);
+      ctx.fillText(fmtUsdSigned(deltaAmount), screenX, screenY + lineGap / 2);
     });
   }
 
