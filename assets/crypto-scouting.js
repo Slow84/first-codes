@@ -54,9 +54,13 @@
 
   function fmtUsdAgg(n) {
     if (n == null) return '-';
-    if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
-    return '$' + n.toLocaleString();
+    var neg = n < 0; n = Math.abs(n);
+    var s;
+    if (n >= 1e9) s = (n / 1e9).toFixed(2) + 'B';
+    else if (n >= 1e6) s = (n / 1e6).toFixed(1) + 'M';
+    else if (n >= 1e3) s = (n / 1e3).toFixed(1) + 'K';
+    else s = Math.round(n).toLocaleString();
+    return (neg ? '-$' : '$') + s;
   }
 
   function fmtUsdPrice(n) {

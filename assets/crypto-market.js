@@ -448,7 +448,7 @@
 
   function escapeHtml(s) {
     var div = document.createElement('div');
-    div.textContent = s;
+    div.textContent = s == null ? '' : String(s);
     return div.innerHTML;
   }
 
