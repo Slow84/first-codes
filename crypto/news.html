@@ -91,7 +91,19 @@
     <span class="eyebrow">CRYPTO</span>
     <h1 style="font-size: 30px; max-width: 20ch;">코인 뉴스</h1>
 
-    <h2 style="font-size: 17px; margin: 28px 0 16px;">뉴스발 급등락 하이라이트 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(코인이 감지된 뉴스 중, 게시 이후 등락폭이 큰 순서 · 5% 이상은 테두리 강조)</span></h2>
+    <h2 style="font-size: 17px; margin: 28px 0 16px;">긍정 · 부정 뉴스 발생 추이 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(매시 정각 자동 기록 — 막 시작해서 주/월/년/최대는 아직 데이터가 적어요)</span></h2>
+    <div class="tabs" id="newsStatsRangeTabs">
+      <button data-range="1" class="tab-btn active">일</button>
+      <button data-range="7" class="tab-btn">주</button>
+      <button data-range="30" class="tab-btn">월</button>
+      <button data-range="365" class="tab-btn">년</button>
+      <button data-range="max" class="tab-btn">최대</button>
+    </div>
+    <div class="chart-card" style="margin-top: 12px;">
+      <canvas id="newsStatsChart" class="price-canvas"></canvas>
+    </div>
+
+    <h2 style="font-size: 17px; margin: 40px 0 16px;">뉴스발 급등락 하이라이트 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(코인이 감지된 뉴스 중, 게시 이후 등락폭이 큰 순서 · 5% 이상은 테두리 강조)</span></h2>
     <div class="rank-grid">
       <div class="tool-card">
         <div class="mega-col-title">긍정 뉴스 (게시 후 상승)</div>

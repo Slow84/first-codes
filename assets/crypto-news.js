@@ -311,6 +311,112 @@
       .catch(function () { return []; });
   })).then(function (pages) { return [].concat.apply([], pages); });
 
+  // ---- 긍정/부정 뉴스 발생 추이 차트 ----
+  // range '1' (일) shows raw hourly points as they come straight from the
+  // log; every other range groups points into daily totals first, since a
+  // week/month/year of hourly bars would be unreadably dense — and won't
+  // have that many points to show for a long while anyway (this log only
+  // just started).
+  function aggregateStatsByDay(points) {
+    var byDay = {};
+    points.forEach(function (p) {
+      var d = new Date(p.t);
+      var key = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+      if (!byDay[key]) byDay[key] = { t: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(), pos: 0, neg: 0 };
+      byDay[key].pos += p.pos;
+      byDay[key].neg += p.neg;
+    });
+    return Object.keys(byDay).map(function (k) { return byDay[k]; }).sort(function (a, b) { return a.t - b.t; });
+  }
+
+  function drawStatsChart(points, range) {
+    var canvas = document.getElementById('newsStatsChart');
+    if (!canvas) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = canvas.clientWidth, h = canvas.clientHeight || 190;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+      (document.documentElement.getAttribute('data-theme') !== 'light' &&
+        window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var goodColor = isDark ? '#4ADE94' : '#1F7A4C';
+    var warnColor = isDark ? '#F0938A' : '#B23A2E';
+    var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    var textColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+
+    var data = range === '1' ? points : aggregateStatsByDay(points);
+    if (data.length < 2) {
+      ctx.fillStyle = textColor;
+      ctx.font = '13px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('아직 데이터가 부족해요 (매시 정각 자동 기록, 막 시작했어요)', w / 2, h / 2);
+      return;
+    }
+
+    var padding = { top: 16, right: 12, bottom: 24, left: 28 };
+    var chartW = w - padding.left - padding.right;
+    var chartH = h - padding.top - padding.bottom;
+    var maxVal = 1;
+    data.forEach(function (d) { maxVal = Math.max(maxVal, d.pos, d.neg); });
+    var groupW = chartW / data.length;
+    var barW = Math.min(14, groupW * 0.32);
+
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1;
+    var gridLines = 4;
+    for (var i = 0; i <= gridLines; i++) {
+      var y = padding.top + chartH * (i / gridLines);
+      ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(w - padding.right, y); ctx.stroke();
+      ctx.fillStyle = textColor;
+      ctx.font = '10px Inter, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(String(Math.round(maxVal * (1 - i / gridLines))), padding.left - 6, y + 3);
+    }
+
+    var labelEvery = Math.max(1, Math.ceil(data.length / 8));
+    data.forEach(function (d, i) {
+      var cx = padding.left + groupW * (i + 0.5);
+      var posH = (d.pos / maxVal) * chartH;
+      var negH = (d.neg / maxVal) * chartH;
+      ctx.fillStyle = goodColor;
+      ctx.fillRect(cx - barW - 1, padding.top + chartH - posH, barW, posH);
+      ctx.fillStyle = warnColor;
+      ctx.fillRect(cx + 1, padding.top + chartH - negH, barW, negH);
+
+      if (i % labelEvery === 0) {
+        var dt = new Date(d.t);
+        var label = range === '1' ? (dt.getHours() + '시') : (dt.getMonth() + 1) + '/' + dt.getDate();
+        ctx.fillStyle = textColor;
+        ctx.font = '10px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, cx, h - 8);
+      }
+    });
+  }
+
+  function loadStatsChart(range) {
+    fetch('/api/news-stats?range=' + range)
+      .then(function (r) { return r.json(); })
+      .then(function (data) { drawStatsChart(data.points || [], range); })
+      .catch(function () { drawStatsChart([], range); });
+  }
+
+  var statsRangeTabs = document.getElementById('newsStatsRangeTabs');
+  if (statsRangeTabs) {
+    statsRangeTabs.addEventListener('click', function (e) {
+      var btn = e.target.closest('.tab-btn');
+      if (!btn) return;
+      statsRangeTabs.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      loadStatsChart(btn.getAttribute('data-range'));
+    });
+    loadStatsChart('1');
+  }
+
   Promise.all([newsPromise, coinsPromise])
     .then(function (results) { renderNews(results[0], results[1]); })
     .catch(function () {
