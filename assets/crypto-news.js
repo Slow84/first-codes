@@ -198,7 +198,7 @@
     if (!top10.length) { el.innerHTML = '<tr><td colspan="3" class="loading-note">더 지난 뉴스가 없어요</td></tr>'; return; }
     el.innerHTML = top10.map(function (n) {
       return '<tr>' +
-        '<td><a class="archive-title-link" href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener">' + escapeHtml(n.title) + '</a></td>' +
+        '<td><a class="archive-title-link" href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener">' + escapeHtml(n.titleKo || n.title) + '</a></td>' +
         '<td class="cell-muted">' + escapeHtml(n.source) + '</td>' +
         '<td class="cell-muted">' + timeAgo(n.pubDate) + '</td>' +
         '</tr>';
@@ -221,14 +221,19 @@
         var thumb = n.image
           ? '<img class="video-thumb" src="' + escapeHtml(n.image) + '" alt="" loading="lazy">'
           : '<div class="video-thumb"></div>';
+        // coin matching always runs on the original English title — a
+        // machine translation of "Bitcoin" into "비트코인" would silently
+        // break the ticker/name regex matching, since that's built around
+        // the Latin-script names CoinGecko actually returns.
         var matched = coins && coins.length ? matchCoin(n.title, coins) : null;
         // keyed by link (not array index) so it still resolves correctly
         // after this array is filtered down from the full 40-item list.
         return '<a class="video-card" href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener">' +
           thumb +
           '<div class="video-body">' +
-          '<div class="video-title">' + escapeHtml(n.title) + '</div>' +
+          '<div class="video-title">' + escapeHtml(n.titleKo || n.title) + '</div>' +
           '<div class="video-meta">' + escapeHtml(n.source) + ' · ' + timeAgo(n.pubDate) + '</div>' +
+          (n.titleKo ? '<div class="video-title-orig">' + escapeHtml(n.title) + '</div>' : '') +
           '<div data-badge-link="' + escapeHtml(n.link) + '"' + (matched ? ' data-coin-id="' + escapeHtml(matched.id) + '"' : '') + '>' +
           (matched ? coinBadgeHtml(matched, null) : '') +
           '</div>' +

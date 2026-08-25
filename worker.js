@@ -270,8 +270,32 @@ function parseRss(xml, source) {
   return items;
 }
 
+// MyMemory (mymemory.translated.net) — free, no signup/API key needed for
+// this volume (anonymous tier: 5000 words/day). Chosen over Google
+// Translate (needs a paid Cloud account + billing) and Brave Search API
+// (checked — it has no translation endpoint at all, only search/news/
+// image/local). Each title is cached indefinitely by article link, so a
+// given headline only ever gets machine-translated once no matter how
+// many 20-minute cache cycles it survives — keeps real usage far under
+// the free quota even though up to 40 items get checked per cycle.
+async function translateTitle(env, link, title) {
+  const cacheKey = 'newstr:' + link;
+  const cached = await env.DATA.get(cacheKey);
+  if (cached) return cached;
+  try {
+    const res = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(title) + '&langpair=en|ko');
+    const data = await res.json();
+    const ko = data && data.responseData && data.responseData.translatedText;
+    if (!ko || (data.responseStatus && data.responseStatus !== 200)) return null;
+    await env.DATA.put(cacheKey, ko, { expirationTtl: 60 * 60 * 24 * 14 }); // 2 weeks — well past when an article stops showing up in the feed anyway
+    return ko;
+  } catch (e) {
+    return null; // translation failure just means the card falls back to the English title
+  }
+}
+
 async function handleNews(env) {
-  const cacheKey = 'news:v2'; // bumped so the new 7-source list takes effect immediately instead of waiting out the old cache entry's TTL
+  const cacheKey = 'news:v3'; // bumped for the new titleKo field
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -289,6 +313,10 @@ async function handleNews(env) {
 
   items.sort(function (a, b) { return new Date(b.pubDate) - new Date(a.pubDate); });
   items = items.slice(0, 40);
+
+  await Promise.all(items.map(async function (it) {
+    it.titleKo = await translateTitle(env, it.link, it.title);
+  }));
 
   const text = JSON.stringify({ items: items });
   await env.DATA.put(cacheKey, text, { expirationTtl: 60 * 20 }); // 20 min — RSS itself updates hourly
