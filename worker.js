@@ -24,10 +24,32 @@ function todayKey(date) {
   return 'visits:' + d.toISOString().slice(0, 10);
 }
 
+// older comments (posted before ids existed) get a stable id synthesized
+// from their position in the array — deterministic as long as entries are
+// only ever appended or edited in place, never reordered.
+function commentId(c, idx) {
+  return c.id || ('legacy-' + c.time + '-' + idx);
+}
+
+function isAdmin(env, key) {
+  return !!env.ADMIN_KEY && key === env.ADMIN_KEY;
+}
+
 async function handleCommentsGet(env, url) {
   const page = (url.searchParams.get('page') || 'home').slice(0, 60);
+  const admin = isAdmin(env, url.searchParams.get('admin') || '');
   const raw = await env.DATA.get('page:' + page);
-  return json(raw ? JSON.parse(raw) : []);
+  const list = raw ? JSON.parse(raw) : [];
+  const withIds = list.map(function (c, idx) { return Object.assign({}, c, { id: commentId(c, idx) }); });
+  // deleted comments stay in the response (redacted for non-admins) rather
+  // than being dropped outright — dropping them would also orphan any
+  // still-visible replies underneath, since the client builds reply
+  // threads by looking up each reply's parent id in this same list.
+  const visible = admin ? withIds : withIds.map(function (c) {
+    if (!c.deleted) return c;
+    return { id: c.id, parentId: c.parentId, time: c.time, name: '[삭제됨]', text: '삭제된 댓글이에요.', deleted: true };
+  });
+  return json(visible);
 }
 
 async function handleCommentsPost(request, env) {
@@ -42,6 +64,11 @@ async function handleCommentsPost(request, env) {
   const name = (body.name || '').toString().trim().slice(0, MAX_NAME) || '익명';
   const text = (body.text || '').toString().trim().slice(0, MAX_TEXT);
   const honeypot = (body.website || '').toString();
+  // top-level comment when omitted; a reply otherwise. Not verified against
+  // the parent existing — this is a low-traffic personal-blog comment
+  // section, not worth an extra KV read to guard against a malformed id
+  // that only a determined bad actor would ever send.
+  const parentId = body.parentId ? String(body.parentId).slice(0, 80) : null;
 
   if (!text) return json({ error: '내용을 입력해주세요.' }, 400);
   if (honeypot) return json({ ok: true }); // looks fine to a bot, but silently ignored
@@ -61,12 +88,43 @@ async function handleCommentsPost(request, env) {
   const key = 'page:' + page;
   const raw = await env.DATA.get(key);
   const list = raw ? JSON.parse(raw) : [];
-  list.push({ name: name, text: text, time: Date.now() });
+  const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  list.push({ id: id, name: name, text: text, time: Date.now(), parentId: parentId });
   if (list.length > MAX_COMMENTS_PER_PAGE) list.splice(0, list.length - MAX_COMMENTS_PER_PAGE);
 
   await env.DATA.put(key, JSON.stringify(list));
   await env.DATA.put(rateKey, String(Date.now()), { expirationTtl: 60 }); // KV requires expirationTtl >= 60s; the 30s rate-limit check above is enforced in code, this is just cleanup
 
+  return json({ ok: true });
+}
+
+// soft-delete only — sets deleted:true instead of removing the entry, so
+// the admin view (handleCommentsGet with a valid ?admin= key) can still
+// see what was removed and why, e.g. to double-check a moderation call.
+async function handleCommentsDelete(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return json({ error: '잘못된 요청이에요.' }, 400);
+  }
+  if (!isAdmin(env, (body.admin || '').toString())) {
+    return json({ error: '권한이 없어요.' }, 403);
+  }
+  const page = (body.page || 'home').toString().slice(0, 60);
+  const id = (body.id || '').toString();
+  if (!id) return json({ error: '삭제할 댓글을 찾지 못했어요.' }, 400);
+
+  const key = 'page:' + page;
+  const raw = await env.DATA.get(key);
+  const list = raw ? JSON.parse(raw) : [];
+  var found = false;
+  list.forEach(function (c, idx) {
+    if (commentId(c, idx) === id) { c.deleted = true; c.deletedAt = Date.now(); found = true; }
+  });
+  if (!found) return json({ error: '삭제할 댓글을 찾지 못했어요.' }, 404);
+
+  await env.DATA.put(key, JSON.stringify(list));
   return json({ ok: true });
 }
 
@@ -466,6 +524,7 @@ export default {
     if (url.pathname === '/api/comments') {
       if (request.method === 'GET') return handleCommentsGet(env, url);
       if (request.method === 'POST') return handleCommentsPost(request, env);
+      if (request.method === 'DELETE') return handleCommentsDelete(request, env);
       return new Response('Method not allowed', { status: 405 });
     }
 
