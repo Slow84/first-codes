@@ -9,3 +9,6 @@ binding = "ASSETS"
 [[kv_namespaces]]
 binding = "DATA"
 id = "3893c8b1f25d4604a1aabc95363ba1ee"
+
+[triggers]
+crons = ["0 * * * *"]

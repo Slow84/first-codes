@@ -2,6 +2,13 @@
   var grid = document.getElementById('newsGrid');
   if (!grid) return;
 
+  // fallback for the hourly stats logger: fire-and-forget, harmless if it
+  // fires more than once an hour (server-side 50-min de-dupe guard) — a
+  // safety net in case the Cloudflare Cron Trigger itself doesn't fire for
+  // some reason, since page visits are the only way to verify from here
+  // whether the schedule is actually registered on Cloudflare's side.
+  fetch('/api/news-stats-tick').catch(function () {});
+
   function escapeHtml(s) {
     var div = document.createElement('div');
     div.textContent = s == null ? '' : String(s);

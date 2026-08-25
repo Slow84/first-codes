@@ -323,6 +323,125 @@ async function handleNews(env) {
   return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 }
 
+// ---- 긍정/부정 뉴스 발생수 로그 ----
+// This is a metric sloworld computes itself (which matched-coin headlines
+// moved >= threshold since publish) — unlike the TVL/price charts, there's
+// no external API with years of history for it already. So this starts a
+// log from scratch: an hourly Cron Trigger (see wrangler.toml + the
+// `scheduled` export below) calls this once an hour, counts how many
+// currently-matched articles are meaningfully positive/negative right now,
+// and appends one point. 일(오늘) becomes meaningful almost immediately;
+// 주/월/년/최대 fill in for real as weeks/months actually pass — no
+// backfilled or fabricated history.
+const NEWS_STAT_COIN_POOL = 1000; // ticker-match pool, mirrors crypto-news.js
+const NEWS_STAT_NAME_POOL = 100; // name-match pool, mirrors crypto-news.js
+const NEWS_STAT_ALIASES = {
+  bitcoin: ['bitcoin'], ethereum: ['ethereum', 'ether'], ripple: ['ripple', 'xrp'],
+  dogecoin: ['dogecoin'], solana: ['solana'], cardano: ['cardano'], tron: ['tron'],
+  binancecoin: ['bnb', 'binance coin'], 'avalanche-2': ['avalanche'], polkadot: ['polkadot'],
+  litecoin: ['litecoin'], chainlink: ['chainlink'], 'shiba-inu': ['shiba inu'],
+  stellar: ['stellar lumens', 'stellar (xlm)'], monero: ['monero'], uniswap: ['uniswap'],
+  aave: ['aave'], 'usd-coin': ['usdc', 'circle'], tether: ['tether', 'usdt']
+};
+const NEWS_STAT_TICKER_BLOCKLIST = ['US', 'USA', 'USD', 'ETF', 'ETFS', 'CEO', 'CFO', 'CFTC', 'SEC', 'API', 'ATH',
+  'NFT', 'DEX', 'CEX', 'ICO', 'IPO', 'GDP', 'LLC', 'INC', 'FBI', 'DOJ', 'IRS', 'ASST'];
+const NEWS_STAT_MIN_ABS_PCT = 0.5; // same "meaningful move" floor as the highlights panel
+
+function escapeRegexForNews(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function matchCoinForStats(title, coins) {
+  const namePool = coins.slice(0, NEWS_STAT_NAME_POOL);
+  for (const c of namePool) {
+    const names = NEWS_STAT_ALIASES[c.id] || [c.name.toLowerCase()];
+    for (const name of names) {
+      if (new RegExp('\\b' + escapeRegexForNews(name) + '\\b', 'i').test(title)) return c;
+    }
+  }
+  const tickerPool = coins.slice(0, NEWS_STAT_COIN_POOL);
+  for (const c of tickerPool) {
+    const sym = (c.symbol || '').toUpperCase();
+    if (sym.length < 3 || NEWS_STAT_TICKER_BLOCKLIST.includes(sym)) continue;
+    if (new RegExp('\\b' + escapeRegexForNews(sym) + '\\b').test(title)) return c;
+  }
+  return null;
+}
+
+async function fetchAnchorPriceForStats(coinId, pubDateMs) {
+  const from = Math.floor(pubDateMs / 1000);
+  const to = Math.floor(Date.now() / 1000);
+  if (to - from < 300) return null;
+  try {
+    const r = await fetch('https://api.coingecko.com/api/v3/coins/' + coinId + '/market_chart/range?vs_currency=usd&from=' + from + '&to=' + to + '&x_cg_demo_api_key=CG-FMfLVSBE5qcpYQ2R9RYTVogy');
+    if (!r.ok) return null;
+    const data = await r.json();
+    const prices = data && data.prices;
+    return prices && prices.length ? prices[0][1] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function computeNewsStatPoint(env) {
+  const newsRaw = await env.DATA.get('news:v3');
+  const items = newsRaw ? (JSON.parse(newsRaw).items || []) : [];
+  if (!items.length) return null;
+
+  const pages = await Promise.all([1, 2, 3, 4].map(function (page) {
+    return fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=' + page + '&price_change_percentage=24h&x_cg_demo_api_key=CG-FMfLVSBE5qcpYQ2R9RYTVogy')
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .catch(function () { return []; });
+  }));
+  const coins = [].concat(...pages);
+  if (!coins.length) return null;
+
+  const matched = items
+    .map(function (n) { return { item: n, coin: matchCoinForStats(n.title, coins) }; })
+    .filter(function (x) { return x.coin; });
+
+  let pos = 0, neg = 0;
+  await Promise.all(matched.map(async function (m) {
+    const anchor = await fetchAnchorPriceForStats(m.coin.id, new Date(m.item.pubDate).getTime());
+    if (anchor == null || !m.coin.current_price) return;
+    const pct = (m.coin.current_price - anchor) / anchor * 100;
+    if (pct >= NEWS_STAT_MIN_ABS_PCT) pos++;
+    else if (pct <= -NEWS_STAT_MIN_ABS_PCT) neg++;
+  }));
+
+  return { t: Date.now(), pos: pos, neg: neg };
+}
+
+const NEWS_STAT_LOG_KEY = 'newsstat:log';
+const NEWS_STAT_MAX_POINTS = 24 * 400; // ~400 days of hourly points, plenty of runway before this needs revisiting
+
+async function logNewsStatPoint(env) {
+  const point = await computeNewsStatPoint(env);
+  if (!point) return;
+  const raw = await env.DATA.get(NEWS_STAT_LOG_KEY);
+  const log = raw ? JSON.parse(raw) : [];
+  // guard against double-logging if this is ever invoked more than once in
+  // the same window (manual test call right after a real cron fire, or a
+  // rare double-fire) — skip if the last point is under 50 minutes old.
+  if (log.length && point.t - log[log.length - 1].t < 50 * 60 * 1000) return;
+  log.push(point);
+  if (log.length > NEWS_STAT_MAX_POINTS) log.splice(0, log.length - NEWS_STAT_MAX_POINTS);
+  await env.DATA.put(NEWS_STAT_LOG_KEY, JSON.stringify(log));
+}
+
+async function handleNewsStats(url, env) {
+  const raw = await env.DATA.get(NEWS_STAT_LOG_KEY);
+  const log = raw ? JSON.parse(raw) : [];
+  const range = url.searchParams.get('range') || 'max';
+  let points = log;
+  if (range !== 'max') {
+    const days = parseInt(range, 10);
+    if (days > 0) {
+      const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+      points = log.filter(function (p) { return p.t >= cutoff; });
+    }
+  }
+  return json({ points: points });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -349,6 +468,26 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
+    if (url.pathname === '/api/news-stats') {
+      if (request.method === 'GET') return handleNewsStats(url, env);
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    // manual trigger for the same hourly job the Cron Trigger runs —
+    // exists so the logging pipeline can be verified without waiting for
+    // the real schedule; the 50-minute double-log guard in
+    // logNewsStatPoint makes repeat hits harmless either way.
+    if (url.pathname === '/api/news-stats-tick') {
+      await logNewsStatPoint(env);
+      return handleNewsStats(url, env);
+    }
+
     return env.ASSETS.fetch(request);
+  },
+
+  // Cron Trigger — see wrangler.toml `[triggers]`. Runs hourly to log one
+  // 긍정/부정 뉴스 발생수 point (see computeNewsStatPoint above).
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(logNewsStatPoint(env));
   }
 };
