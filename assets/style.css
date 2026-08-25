@@ -241,7 +241,7 @@ body:has(.hero-dark) .mobile-panel a {
 
 .mega-link {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   text-decoration: none;
   color: var(--text);
@@ -249,8 +249,8 @@ body:has(.hero-dark) .mobile-panel a {
 }
 
 .mega-icon {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1.5px solid var(--border);
   display: flex;
@@ -260,7 +260,7 @@ body:has(.hero-dark) .mobile-panel a {
   color: var(--ink);
 }
 
-.mega-icon svg { width: 16px; height: 16px; }
+.mega-icon svg { width: 20px; height: 20px; }
 
 .mega-link strong { display: block; font-size: 14px; font-weight: 700; margin-bottom: 2px; }
 .mega-link span { display: block; font-size: 12.5px; color: var(--text-muted); }
