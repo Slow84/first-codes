@@ -1,37 +1,7 @@
 (function () {
-  // ---- TradingView Advanced Chart widgets (has its own built-in range
-  // selector, 1D through ALL — free to embed, no TradingView account needed) ----
-  var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  document.querySelectorAll('[data-tv-symbol]').forEach(function (el) {
-    var container = document.createElement('div');
-    container.className = 'tradingview-widget-container';
-    container.style.height = '600px';
-    var inner = document.createElement('div');
-    inner.className = 'tradingview-widget-container__widget';
-    inner.style.height = '100%';
-    container.appendChild(inner);
-    var script = document.createElement('script');
-    script.type = 'text/javascript';
-    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
-    script.async = true;
-    script.text = JSON.stringify({
-      symbol: el.getAttribute('data-tv-symbol'),
-      width: '100%',
-      height: '100%',
-      locale: 'kr',
-      range: '3M',
-      theme: isDark ? 'dark' : 'light',
-      style: '3',
-      timezone: 'Asia/Seoul',
-      withdateranges: true,
-      hide_side_toolbar: true,
-      hide_top_toolbar: true,
-      hide_legend: true,
-      allow_symbol_change: false
-    });
-    container.appendChild(script);
-    el.appendChild(container);
-  });
+  // TradingView widget loader moved to assets/tv-widget.js (shared, since
+  // it was never actually crypto-specific — crypto/market.html now loads
+  // that file directly instead of this one containing its own copy).
 
   // ---- interactive per-coin price charts with clickable time ranges ----
   // CoinGecko's free tier (even with a demo key) 401s on days=max, so this
