@@ -283,10 +283,20 @@ async function translateTitle(env, link, title) {
   const cached = await env.DATA.get(cacheKey);
   if (cached) return cached;
   try {
-    const res = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(title) + '&langpair=en|ko');
+    const res = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(title) + '&langpair=en|ko', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; sloworldbot/1.0)' }
+    });
     const data = await res.json();
+    // MyMemory's own JSON is inconsistent about numeric vs string fields
+    // (confirmed by inspecting real responses — e.g. `quality` comes back
+    // as a number in some match entries and a string in others), so a
+    // strict `=== 200` check on responseStatus was silently treating good
+    // translations as failures whenever it came back as the string "200"
+    // instead of the number 200. The presence of translatedText itself is
+    // the reliable success signal — this was the actual reason 0/40
+    // articles ever got translated after deploying.
     const ko = data && data.responseData && data.responseData.translatedText;
-    if (!ko || (data.responseStatus && data.responseStatus !== 200)) return null;
+    if (!ko) return null;
     await env.DATA.put(cacheKey, ko, { expirationTtl: 60 * 60 * 24 * 14 }); // 2 weeks — well past when an article stops showing up in the feed anyway
     return ko;
   } catch (e) {
@@ -295,7 +305,7 @@ async function translateTitle(env, link, title) {
 }
 
 async function handleNews(env) {
-  const cacheKey = 'news:v3'; // bumped for the new titleKo field
+  const cacheKey = 'news:v4'; // bumped for the new titleKo field
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -382,7 +392,7 @@ async function fetchAnchorPriceForStats(coinId, pubDateMs) {
 }
 
 async function computeNewsStatPoint(env) {
-  const newsRaw = await env.DATA.get('news:v3');
+  const newsRaw = await env.DATA.get('news:v4');
   const items = newsRaw ? (JSON.parse(newsRaw).items || []) : [];
   if (!items.length) return null;
 
