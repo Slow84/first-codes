@@ -312,7 +312,7 @@ async function translateTitle(env, link, title) {
 }
 
 async function handleNews(env) {
-  const cacheKey = 'news:v5'; // bumped for the new titleKo field
+  const cacheKey = 'news:v6'; // bumped for the new titleKo field
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -399,7 +399,7 @@ async function fetchAnchorPriceForStats(coinId, pubDateMs) {
 }
 
 async function computeNewsStatPoint(env) {
-  const newsRaw = await env.DATA.get('news:v5');
+  const newsRaw = await env.DATA.get('news:v6');
   const items = newsRaw ? (JSON.parse(newsRaw).items || []) : [];
   if (!items.length) return null;
 
