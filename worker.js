@@ -279,7 +279,7 @@ function parseRss(xml, source) {
 // many 20-minute cache cycles it survives — keeps real usage far under
 // the free quota even though up to 40 items get checked per cycle.
 async function translateTitle(env, link, title) {
-  const cacheKey = 'newstr:' + link;
+  const cacheKey = 'newstr2:' + link; // v2 prefix — v1 entries may be poisoned with a cached quota-warning string from before the fix above
   const cached = await env.DATA.get(cacheKey);
   if (cached) return cached;
   try {
@@ -296,7 +296,14 @@ async function translateTitle(env, link, title) {
     // the reliable success signal — this was the actual reason 0/40
     // articles ever got translated after deploying.
     const ko = data && data.responseData && data.responseData.translatedText;
-    if (!ko) return null;
+    // MyMemory returns HTTP 200 with translatedText set to this literal
+    // warning string once the free daily quota (5000 words, anonymous
+    // tier) is used up — that's exactly what happened today from this
+    // session's own repeated manual testing. Caught the hard way: the
+    // previous version of this check didn't catch it, so it briefly got
+    // cached as if it were a real translation. Must check for this
+    // explicitly since it's still a "successful" HTTP response.
+    if (!ko || /^MYMEMORY WARNING/i.test(ko)) return null;
     await env.DATA.put(cacheKey, ko, { expirationTtl: 60 * 60 * 24 * 14 }); // 2 weeks — well past when an article stops showing up in the feed anyway
     return ko;
   } catch (e) {
@@ -305,7 +312,7 @@ async function translateTitle(env, link, title) {
 }
 
 async function handleNews(env) {
-  const cacheKey = 'news:v4'; // bumped for the new titleKo field
+  const cacheKey = 'news:v5'; // bumped for the new titleKo field
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -392,7 +399,7 @@ async function fetchAnchorPriceForStats(coinId, pubDateMs) {
 }
 
 async function computeNewsStatPoint(env) {
-  const newsRaw = await env.DATA.get('news:v4');
+  const newsRaw = await env.DATA.get('news:v5');
   const items = newsRaw ? (JSON.parse(newsRaw).items || []) : [];
   if (!items.length) return null;
 
