@@ -841,6 +841,13 @@ textarea.comment-field { resize: vertical; margin-top: 10px; }
 .news-coin-badge .badge-label { color: var(--text-muted); font-size: 10.5px; }
 .news-coin-badge .badge-sep { color: var(--border); }
 
+.highlight-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.highlight-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; text-decoration: none; color: var(--text); background: var(--bg); transition: border-color 0.15s ease, transform 0.15s ease; }
+.highlight-row:hover { border-color: var(--ink); transform: translateY(-1px); }
+.highlight-row .coin-tag { font-weight: 800; background: var(--bg-soft); border-radius: 6px; padding: 2px 7px; font-size: 12px; }
+.highlight-title { flex: 1 1 200px; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.35; }
+.highlight-time { font-size: 11px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+
 /* sitemap directory page */
 .sitemap-section { margin-bottom: 36px; }
 .sitemap-section h2 { font-size: 18px; margin-bottom: 16px; }

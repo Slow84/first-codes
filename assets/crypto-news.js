@@ -38,26 +38,6 @@
     return Math.round(diffHr / 24) + '일 전';
   }
 
-  // ---- top 10 gainers / losers (same data source as crypto-market.js's
-  // top5 table) ----
-  function newsSearchUrl(coinName) {
-    return 'https://news.google.com/search?q=' + encodeURIComponent(coinName + ' crypto') + '&hl=ko&gl=KR&ceid=KR:ko';
-  }
-
-  function renderRankList(tbodyId, list) {
-    var el = document.getElementById(tbodyId);
-    if (!el) return;
-    if (!list.length) { el.innerHTML = '<tr><td colspan="4" class="loading-note">데이터가 없어요</td></tr>'; return; }
-    el.innerHTML = list.map(function (c) {
-      return '<tr>' +
-        '<td><div class="coin-cell"><strong>' + escapeHtml(c.name) + '</strong><span>' + escapeHtml(c.symbol.toUpperCase()) + '</span></div></td>' +
-        '<td>' + fmtUsdPrice(c.current_price || 0) + '</td>' +
-        '<td>' + pctSpan(c.price_change_percentage_24h || 0) + '</td>' +
-        '<td><a class="news-link" href="' + newsSearchUrl(c.name) + '" target="_blank" rel="noopener">검색 →</a></td>' +
-        '</tr>';
-    }).join('');
-  }
-
   // ---- coin-mention matching (best-effort, not exhaustive) ----
   // Only matched against the top MATCH_POOL_SIZE coins by market cap —
   // small/mid-cap coin *names* are often generic English words ("Movement",
@@ -149,6 +129,35 @@
     return html;
   }
 
+  // "얼마나 조용한 노이즈까지 걸러낼지" — 0에 가까운 등락까지 하이라이트에
+  // 올라오면 "급등락"이라는 말이 무색해져서, 최소한의 바닥선만 둠. 그 위로는
+  // 있는 만큼(적으면 적은 대로) 등락폭 큰 순서로만 보여줌 — 고정된 기준치로
+  // "떴다 안 떴다" 하는 것보다 항상 지금 가장 크게 움직인 것부터 보여주는
+  // 게 "빨리 알고 대응하기"라는 원래 목적에 더 맞음.
+  var HIGHLIGHT_MIN_ABS_PCT = 0.5;
+  var HIGHLIGHT_COUNT = 8;
+
+  function renderHighlights(scored) {
+    var panel = document.getElementById('newsHighlights');
+    if (!panel) return;
+    var picked = scored
+      .filter(function (s) { return Math.abs(s.pct) >= HIGHLIGHT_MIN_ABS_PCT; })
+      .sort(function (a, b) { return Math.abs(b.pct) - Math.abs(a.pct); })
+      .slice(0, HIGHLIGHT_COUNT);
+    if (!picked.length) {
+      panel.innerHTML = '<p class="loading-note">지금은 뉴스 게시 이후 뚜렷하게 움직인 코인이 없어요.</p>';
+      return;
+    }
+    panel.innerHTML = picked.map(function (s) {
+      return '<a class="highlight-row" href="' + escapeHtml(s.item.link) + '" target="_blank" rel="noopener">' +
+        '<span class="coin-tag">' + escapeHtml(s.coin.symbol.toUpperCase()) + '</span>' +
+        pctSpan(s.pct) +
+        '<span class="highlight-title">' + escapeHtml(s.item.title) + '</span>' +
+        '<span class="highlight-time">게시 ' + timeAgo(s.item.pubDate) + '</span>' +
+        '</a>';
+    }).join('');
+  }
+
   function renderNews(items, coins) {
     if (!items || !items.length) {
       grid.innerHTML = '<p class="loading-note">불러올 뉴스가 없어요.</p>';
@@ -170,21 +179,39 @@
         '</div></a>';
     }).join('');
 
+    var highlightsPanel = document.getElementById('newsHighlights');
+    if (!coins || !coins.length) {
+      if (highlightsPanel) highlightsPanel.innerHTML = '<p class="loading-note">시세 정보를 못 가져와서 계산할 수 없어요.</p>';
+      return;
+    }
+
     // fill in "게시 후" badges once each matched coin's anchor price
-    // resolves — done as a second pass so the page shows current-price
-    // badges immediately instead of waiting on ~15 historical-price calls.
-    if (!coins || !coins.length) return;
+    // resolves, AND collect the same results to rank the highlights panel
+    // above — one fetch pass feeds both, so switching tabs/scrolling
+    // doesn't trigger it twice.
+    var matchedEntries = [];
     items.forEach(function (n, i) {
       var slot = grid.querySelector('[data-badge-slot="' + i + '"][data-coin-id]');
       if (!slot) return;
       var coinId = slot.getAttribute('data-coin-id');
       var coin = coins.find(function (c) { return c.id === coinId; });
       if (!coin) return;
-      fetchAnchorPrice(coinId, new Date(n.pubDate).getTime()).then(function (anchor) {
-        if (anchor == null || !coin.current_price) return;
-        var sincePct = (coin.current_price - anchor) / anchor * 100;
-        slot.innerHTML = coinBadgeHtml(coin, sincePct);
+      matchedEntries.push({ item: n, coin: coin, slot: slot });
+    });
+
+    if (!matchedEntries.length) { renderHighlights([]); return; }
+
+    var pending = matchedEntries.map(function (entry) {
+      return fetchAnchorPrice(entry.coin.id, new Date(entry.item.pubDate).getTime()).then(function (anchor) {
+        if (anchor == null || !entry.coin.current_price) return null;
+        var pct = (entry.coin.current_price - anchor) / anchor * 100;
+        entry.slot.innerHTML = coinBadgeHtml(entry.coin, pct);
+        return { item: entry.item, coin: entry.coin, pct: pct };
       });
+    });
+
+    Promise.all(pending).then(function (results) {
+      renderHighlights(results.filter(Boolean));
     });
   }
 
@@ -199,17 +226,11 @@
     .then(function (r) { return r.ok ? r.json() : []; })
     .catch(function () { return []; });
 
-  coinsPromise.then(function (coins) {
-    var valid = coins.filter(function (c) { return typeof c.price_change_percentage_24h === 'number'; });
-    var gainers = valid.slice().sort(function (a, b) { return b.price_change_percentage_24h - a.price_change_percentage_24h; }).slice(0, 10);
-    var losers = valid.slice().sort(function (a, b) { return a.price_change_percentage_24h - b.price_change_percentage_24h; }).slice(0, 10);
-    renderRankList('newsTopGainers', gainers);
-    renderRankList('newsTopLosers', losers);
-  });
-
   Promise.all([newsPromise, coinsPromise])
     .then(function (results) { renderNews(results[0], results[1]); })
     .catch(function () {
       grid.innerHTML = '<p class="loading-note">불러오지 못했어요. 잠시 후 다시 시도해주세요.</p>';
+      var highlightsPanel = document.getElementById('newsHighlights');
+      if (highlightsPanel) highlightsPanel.innerHTML = '<p class="loading-note">불러오지 못했어요.</p>';
     });
 })();
