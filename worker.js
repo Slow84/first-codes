@@ -207,13 +207,24 @@ async function handleYoutube(env, url) {
   return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 }
 
-// Crypto news — pulls RSS from CoinDesk and Cointelegraph server-side (both
-// require no API key, but a browser fetch would hit CORS, so it's proxied
-// here). RSS is simple enough that a small regex parser is easier than
-// shipping an XML library into a Worker.
+// Crypto news — pulls RSS server-side from several outlets (all require no
+// API key, but a browser fetch would hit CORS, so it's proxied here). RSS
+// is simple enough that a small regex parser is easier than shipping an
+// XML library into a Worker.
+// Started with just CoinDesk + Cointelegraph, but at a 2-hour freshness
+// window (see crypto-news.js) those two alone only produced ~1 fresh
+// article at any given moment (verified against live feeds) — added 5
+// more reputable, no-paywall outlets to raise that. Each URL was checked
+// live (HTTP 200, real <item> entries) before adding; picked for
+// reputation/coverage over pure volume (skipped lower-tier aggregators).
 const NEWS_FEEDS = [
   { url: 'https://www.coindesk.com/arc/outboundfeeds/rss', source: 'CoinDesk' },
-  { url: 'https://cointelegraph.com/rss', source: 'Cointelegraph' }
+  { url: 'https://cointelegraph.com/rss', source: 'Cointelegraph' },
+  { url: 'https://www.theblock.co/rss.xml', source: 'The Block' },
+  { url: 'https://decrypt.co/feed', source: 'Decrypt' },
+  { url: 'https://cryptoslate.com/feed/', source: 'CryptoSlate' },
+  { url: 'https://crypto.news/feed/', source: 'crypto.news' },
+  { url: 'https://u.today/rss', source: 'U.Today' }
 ];
 
 function xmlTag(block, tag) {
@@ -260,7 +271,7 @@ function parseRss(xml, source) {
 }
 
 async function handleNews(env) {
-  const cacheKey = 'news:v1';
+  const cacheKey = 'news:v2'; // bumped so the new 7-source list takes effect immediately instead of waiting out the old cache entry's TTL
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
