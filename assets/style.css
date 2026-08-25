@@ -249,18 +249,31 @@ body:has(.hero-dark) .mobile-panel a {
 }
 
 .mega-icon {
+  position: relative;
   width: 44px;
   height: 44px;
   border-radius: 50%;
   border: 1.5px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
   color: var(--ink);
 }
 
-.mega-icon svg { width: 20px; height: 20px; display: block; }
+/* absolute + translate(-50%,-50%) instead of flex centering — flexbox
+   centering on this element wasn't actually landing the icon in the
+   middle (confirmed by the user in an incognito window, ruling out
+   caching), for a reason that wasn't found by inspecting the CSS/SVG
+   math alone. This technique pins the icon's own center to the circle's
+   center directly via coordinates, so it can't drift regardless of
+   whatever flex/inline-SVG interaction was causing the original offset. */
+.mega-icon svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  display: block;
+}
 
 .mega-link strong { display: block; font-size: 14px; font-weight: 700; margin-bottom: 2px; }
 .mega-link span { display: block; font-size: 12.5px; color: var(--text-muted); }
