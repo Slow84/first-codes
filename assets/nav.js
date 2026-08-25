@@ -63,6 +63,7 @@
     { href: '/economy/index.html', label: 'Economy' },
     { href: '/life/index.html', label: 'Life' },
     { href: '/crypto/index.html', label: 'Crypto' },
+    { href: '/real-estate/index.html', label: '부동산' },
     { href: '/etc/index.html', label: 'Etc' }
   ];
 
