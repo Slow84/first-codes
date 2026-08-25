@@ -215,7 +215,7 @@
     var olderItems = items.filter(function (n) { return now - new Date(n.pubDate).getTime() > FRESH_WINDOW_MS; });
 
     if (!freshItems.length) {
-      grid.innerHTML = '<p class="loading-note">최근 2시간 이내 올라온 뉴스가 없어요. 아래 표에서 그 이전 뉴스를 볼 수 있어요.</p>';
+      grid.innerHTML = '<p class="loading-note">최근 6시간 이내 올라온 뉴스가 없어요. 아래 표에서 그 이전 뉴스를 볼 수 있어요.</p>';
     } else {
       grid.innerHTML = freshItems.map(function (n) {
         var thumb = n.image
