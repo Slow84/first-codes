@@ -171,7 +171,7 @@
       return;
     }
     panel.innerHTML = list.map(function (s) {
-      return '<a class="highlight-row' + spikeClass(s.pct) + '" href="' + escapeHtml(s.item.link) + '" target="_blank" rel="noopener">' +
+      return '<a class="highlight-row' + spikeClass(s.pct) + '" href="' + escapeHtml(s.item.link) + '" target="_blank" rel="noopener" draggable="false">' +
         '<span class="coin-tag">' + escapeHtml(s.coin.symbol.toUpperCase()) + '</span>' +
         pctSpan(s.pct) +
         '<span class="highlight-title">' + escapeHtml(s.item.title) + '</span>' +
@@ -205,7 +205,7 @@
     if (!top10.length) { el.innerHTML = '<tr><td colspan="3" class="loading-note">더 지난 뉴스가 없어요</td></tr>'; return; }
     el.innerHTML = top10.map(function (n) {
       return '<tr>' +
-        '<td><a class="archive-title-link" href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener">' + escapeHtml(n.titleKo || n.title) + '</a></td>' +
+        '<td><a class="archive-title-link" href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener" draggable="false">' + escapeHtml(n.titleKo || n.title) + '</a></td>' +
         '<td class="cell-muted">' + escapeHtml(n.source) + '</td>' +
         '<td class="cell-muted">' + timeAgo(n.pubDate) + '</td>' +
         '</tr>';
@@ -226,7 +226,7 @@
     } else {
       grid.innerHTML = freshItems.map(function (n) {
         var thumb = n.image
-          ? '<img class="video-thumb" src="' + escapeHtml(n.image) + '" alt="" loading="lazy">'
+          ? '<img class="video-thumb" src="' + escapeHtml(n.image) + '" alt="" loading="lazy" draggable="false">'
           : '<div class="video-thumb"></div>';
         // coin matching always runs on the original English title — a
         // machine translation of "Bitcoin" into "비트코인" would silently
@@ -235,7 +235,7 @@
         var matched = coins && coins.length ? matchCoin(n.title, coins) : null;
         // keyed by link (not array index) so it still resolves correctly
         // after this array is filtered down from the full 40-item list.
-        return '<a class="video-card" href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener">' +
+        return '<a class="video-card" href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener" draggable="false">' +
           thumb +
           '<div class="video-body">' +
           '<div class="video-title">' + escapeHtml(n.titleKo || n.title) + '</div>' +

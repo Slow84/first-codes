@@ -828,9 +828,10 @@ textarea.comment-field { resize: vertical; margin-top: 10px; }
 
 /* ---------- youtube trending pages ---------- */
 .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; margin-top: 20px; }
-.video-card { background: var(--bg); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; text-decoration: none; color: var(--text); display: flex; flex-direction: column; transition: border-color 0.15s ease, transform 0.15s ease; }
+.video-card { background: var(--bg); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; text-decoration: none; color: var(--text); display: flex; flex-direction: column; transition: border-color 0.15s ease, transform 0.15s ease; -webkit-user-drag: none; }
+.video-card .video-title, .video-card .video-title-orig { -webkit-user-drag: none; user-select: text; }
 .video-card:hover { border-color: var(--ink); transform: translateY(-2px); }
-.video-thumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--bg-soft); display: block; }
+.video-thumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--bg-soft); display: block; -webkit-user-drag: none; }
 .video-body { padding: 12px 14px; }
 .video-rank { font-size: 11px; font-weight: 800; color: var(--accent); margin-bottom: 4px; }
 .video-title { font-size: 13.5px; font-weight: 700; line-height: 1.35; margin: 0 0 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -846,14 +847,14 @@ textarea.comment-field { resize: vertical; margin-top: 10px; }
 .highlight-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; text-decoration: none; color: var(--text); background: var(--bg); transition: border-color 0.15s ease, transform 0.15s ease; }
 .highlight-row:hover { border-color: var(--ink); transform: translateY(-1px); }
 .highlight-row .coin-tag { font-weight: 800; background: var(--bg-soft); border-radius: 6px; padding: 2px 7px; font-size: 12px; }
-.highlight-title { flex: 1 1 200px; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.35; }
+.highlight-title { flex: 1 1 200px; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.35; user-select: text; -webkit-user-drag: none; }
 .highlight-time { font-size: 11px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
 
 /* 게시 후 등락폭이 5% 이상인 "급등락" 뉴스 강조 — 방향(급등/급락) 상관없이
    동일하게 표시(둘 다 빠르게 대응해야 하는 신호라서 색을 굳이 안 나눔) */
 .video-card.price-spike-up, .highlight-row.price-spike-up { border-color: var(--good); box-shadow: 0 0 0 1px var(--good); }
 .video-card.price-spike-down, .highlight-row.price-spike-down { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
-.archive-title-link { color: var(--text); text-decoration: none; font-size: 12.5px; font-weight: 600; }
+.archive-title-link { color: var(--text); text-decoration: none; font-size: 12.5px; font-weight: 600; user-select: text; -webkit-user-drag: none; }
 .archive-title-link:hover { color: var(--accent); }
 
 /* sitemap directory page */
