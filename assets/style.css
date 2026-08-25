@@ -260,7 +260,7 @@ body:has(.hero-dark) .mobile-panel a {
   color: var(--ink);
 }
 
-.mega-icon svg { width: 20px; height: 20px; }
+.mega-icon svg { width: 20px; height: 20px; display: block; }
 
 .mega-link strong { display: block; font-size: 14px; font-weight: 700; margin-bottom: 2px; }
 .mega-link span { display: block; font-size: 12.5px; color: var(--text-muted); }
@@ -414,7 +414,7 @@ body:has(.hero-dark) .mobile-panel a {
 .cat-card:hover { border-color: var(--ink); transform: translateY(-2px); }
 
 .cat-card .mega-icon { width: 44px; height: 44px; margin-bottom: 18px; }
-.cat-card .mega-icon svg { width: 20px; height: 20px; }
+.cat-card .mega-icon svg { width: 20px; height: 20px; display: block; }
 
 .cat-card h3 { font-size: 19px; margin-bottom: 8px; }
 .cat-card p { font-size: 13.5px; color: var(--text-muted); margin: 0 0 16px; }
