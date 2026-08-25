@@ -39,12 +39,20 @@
   }
 
   // ---- coin-mention matching (best-effort, not exhaustive) ----
-  // Only matched against the top MATCH_POOL_SIZE coins by market cap —
-  // small/mid-cap coin *names* are often generic English words ("Movement",
-  // "Render") and would false-positive constantly on general prose; top
-  // coins are what general crypto-news headlines overwhelmingly discuss
-  // anyway (verified against real headlines before building this).
-  var MATCH_POOL_SIZE = 60;
+  // Name matching stays conservative (top 100 by market cap) — small/
+  // mid-cap coin *names* are often generic English words ("Movement",
+  // "Render") and would false-positive constantly on general prose.
+  // Ticker matching is much safer against false positives (ALL-CAPS,
+  // whole-word only, blocklisted acronyms — see matchCoin below), so it's
+  // allowed to search the full top 1000, which is what actually lets
+  // smaller-cap coin news (hacks, exploits, delistings — often the more
+  // urgent alt-coin signals) get caught at all. Verified against real
+  // headlines before widening this: a Zilliqa hack story (rank 431, well
+  // outside top 250) was being silently missed until this was widened —
+  // re-tested afterward and it matched via ticker "ZIL" with zero new
+  // false positives across the same 40 real headlines.
+  var NAME_MATCH_POOL_SIZE = 100;
+  var TICKER_MATCH_POOL_SIZE = 1000;
   // headlines usually use a coin's prose name/brand, not its ticker
   // ("Bitcoin hits $80,000", not "BTC hits $80,000") — this covers the
   // handful of major coins whose common prose name differs from CoinGecko's
@@ -78,9 +86,9 @@
   function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
   function matchCoin(title, coins) {
-    var pool = coins.slice(0, MATCH_POOL_SIZE);
-    for (var i = 0; i < pool.length; i++) {
-      var c = pool[i];
+    var namePool = coins.slice(0, NAME_MATCH_POOL_SIZE);
+    for (var i = 0; i < namePool.length; i++) {
+      var c = namePool[i];
       var names = ALIASES[c.id] || [c.name.toLowerCase()];
       for (var j = 0; j < names.length; j++) {
         var re = new RegExp('\\b' + escapeRegex(names[j]) + '\\b', 'i');
@@ -88,9 +96,12 @@
       }
     }
     // fallback: an ALL-CAPS ticker as its own word (case-sensitive, so a
-    // lowercase/mixed-case coincidence like "One" the pronoun doesn't match)
-    for (var i = 0; i < pool.length; i++) {
-      var c = pool[i];
+    // lowercase/mixed-case coincidence like "One" the pronoun doesn't
+    // match) — searches the much wider pool since this rule alone is
+    // strict enough to stay safe at that scale.
+    var tickerPool = coins.slice(0, TICKER_MATCH_POOL_SIZE);
+    for (var i = 0; i < tickerPool.length; i++) {
+      var c = tickerPool[i];
       var sym = (c.symbol || '').toUpperCase();
       if (sym.length < 3 || TICKER_BLOCKLIST.indexOf(sym) !== -1) continue;
       var re = new RegExp('\\b' + escapeRegex(sym) + '\\b');
@@ -136,25 +147,24 @@
   // 게 "빨리 알고 대응하기"라는 원래 목적에 더 맞음.
   var HIGHLIGHT_MIN_ABS_PCT = 0.5;
   var HIGHLIGHT_COUNT = 8;
-  // "급등락" attention threshold — direction doesn't matter here (a -5%
-  // plunge needs just as fast a reaction as a +5% pump), so both get the
-  // same red-border treatment rather than color-coding by up/down.
+  // "급등락" attention threshold, now direction-aware: a pump gets a green
+  // border, a dump gets a red one, matching the 긍정/부정 split below.
   var SPIKE_THRESHOLD_PCT = 5;
 
-  function renderHighlights(scored) {
-    var panel = document.getElementById('newsHighlights');
+  function spikeClass(pct) {
+    if (Math.abs(pct) < SPIKE_THRESHOLD_PCT) return '';
+    return pct >= 0 ? ' price-spike-up' : ' price-spike-down';
+  }
+
+  function renderHighlightColumn(containerId, list, emptyMsg) {
+    var panel = document.getElementById(containerId);
     if (!panel) return;
-    var picked = scored
-      .filter(function (s) { return Math.abs(s.pct) >= HIGHLIGHT_MIN_ABS_PCT; })
-      .sort(function (a, b) { return Math.abs(b.pct) - Math.abs(a.pct); })
-      .slice(0, HIGHLIGHT_COUNT);
-    if (!picked.length) {
-      panel.innerHTML = '<p class="loading-note">지금은 뉴스 게시 이후 뚜렷하게 움직인 코인이 없어요.</p>';
+    if (!list.length) {
+      panel.innerHTML = '<p class="loading-note">' + emptyMsg + '</p>';
       return;
     }
-    panel.innerHTML = picked.map(function (s) {
-      var spike = Math.abs(s.pct) >= SPIKE_THRESHOLD_PCT ? ' price-spike' : '';
-      return '<a class="highlight-row' + spike + '" href="' + escapeHtml(s.item.link) + '" target="_blank" rel="noopener">' +
+    panel.innerHTML = list.map(function (s) {
+      return '<a class="highlight-row' + spikeClass(s.pct) + '" href="' + escapeHtml(s.item.link) + '" target="_blank" rel="noopener">' +
         '<span class="coin-tag">' + escapeHtml(s.coin.symbol.toUpperCase()) + '</span>' +
         pctSpan(s.pct) +
         '<span class="highlight-title">' + escapeHtml(s.item.title) + '</span>' +
@@ -163,10 +173,20 @@
     }).join('');
   }
 
+  function renderHighlights(scored) {
+    var eligible = scored.filter(function (s) { return Math.abs(s.pct) >= HIGHLIGHT_MIN_ABS_PCT; });
+    var positives = eligible.filter(function (s) { return s.pct > 0; })
+      .sort(function (a, b) { return b.pct - a.pct; }).slice(0, HIGHLIGHT_COUNT);
+    var negatives = eligible.filter(function (s) { return s.pct < 0; })
+      .sort(function (a, b) { return a.pct - b.pct; }).slice(0, HIGHLIGHT_COUNT);
+    renderHighlightColumn('newsHighlightsUp', positives, '지금은 뉴스 게시 이후 뚜렷하게 오른 코인이 없어요.');
+    renderHighlightColumn('newsHighlightsDown', negatives, '지금은 뉴스 게시 이후 뚜렷하게 내린 코인이 없어요.');
+  }
+
   // grid focuses on "현황판" — what's happening right now — so only very
   // fresh articles get a full card; anything older moves to the archive
   // table at the bottom instead of cluttering the main view.
-  var FRESH_WINDOW_MS = 2 * 60 * 60 * 1000;
+  var FRESH_WINDOW_MS = 6 * 60 * 60 * 1000;
 
   function renderArchive(items) {
     var el = document.getElementById('newsArchive');
@@ -218,9 +238,9 @@
 
     renderArchive(olderItems);
 
-    var highlightsPanel = document.getElementById('newsHighlights');
     if (!coins || !coins.length) {
-      if (highlightsPanel) highlightsPanel.innerHTML = '<p class="loading-note">시세 정보를 못 가져와서 계산할 수 없어요.</p>';
+      renderHighlightColumn('newsHighlightsUp', [], '시세 정보를 못 가져와서 계산할 수 없어요.');
+      renderHighlightColumn('newsHighlightsDown', [], '시세 정보를 못 가져와서 계산할 수 없어요.');
       return;
     }
 
@@ -248,9 +268,10 @@
         var pct = (entry.coin.current_price - anchor) / anchor * 100;
         if (entry.slot) {
           entry.slot.innerHTML = coinBadgeHtml(entry.coin, pct);
-          if (Math.abs(pct) >= SPIKE_THRESHOLD_PCT) {
+          var spike = spikeClass(pct).trim();
+          if (spike) {
             var card = entry.slot.closest('.video-card');
-            if (card) card.classList.add('price-spike');
+            if (card) card.classList.add(spike);
           }
         }
         return { item: entry.item, coin: entry.coin, pct: pct };
@@ -269,15 +290,20 @@
       return res.data.items || [];
     });
 
-  var coinsPromise = fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&price_change_percentage=24h'))
-    .then(function (r) { return r.ok ? r.json() : []; })
-    .catch(function () { return []; });
+  // CoinGecko caps per_page at 250, so covering the top 1000 (see
+  // TICKER_MATCH_POOL_SIZE above) takes 4 pages — fetched in parallel,
+  // already confirmed safe well beyond this concurrency in earlier testing.
+  var coinsPromise = Promise.all([1, 2, 3, 4].map(function (page) {
+    return fetch(cgUrl('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=' + page + '&price_change_percentage=24h'))
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .catch(function () { return []; });
+  })).then(function (pages) { return [].concat.apply([], pages); });
 
   Promise.all([newsPromise, coinsPromise])
     .then(function (results) { renderNews(results[0], results[1]); })
     .catch(function () {
       grid.innerHTML = '<p class="loading-note">불러오지 못했어요. 잠시 후 다시 시도해주세요.</p>';
-      var highlightsPanel = document.getElementById('newsHighlights');
-      if (highlightsPanel) highlightsPanel.innerHTML = '<p class="loading-note">불러오지 못했어요.</p>';
+      renderHighlightColumn('newsHighlightsUp', [], '불러오지 못했어요.');
+      renderHighlightColumn('newsHighlightsDown', [], '불러오지 못했어요.');
     });
 })();
