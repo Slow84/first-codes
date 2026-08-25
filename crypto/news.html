@@ -91,10 +91,33 @@
     <span class="eyebrow">CRYPTO</span>
     <h1 style="font-size: 30px; max-width: 20ch;">코인 뉴스</h1>
 
-    <div id="newsGrid" class="video-grid" style="margin-top: 28px;">
+    <h2 style="font-size: 17px; margin: 28px 0 16px;">급등 · 급락 TOP10 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(24시간 기준, 시총 상위 250개 코인 중)</span></h2>
+    <div class="rank-grid">
+      <div class="tool-card">
+        <div class="mega-col-title">급등 TOP10</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>코인</th><th>현재가</th><th>24H변동</th><th>뉴스</th></tr></thead>
+            <tbody id="newsTopGainers"><tr><td colspan="4" class="loading-note">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="tool-card">
+        <div class="mega-col-title">급락 TOP10</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>코인</th><th>현재가</th><th>24H변동</th><th>뉴스</th></tr></thead>
+            <tbody id="newsTopLosers"><tr><td colspan="4" class="loading-note">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <h2 style="font-size: 17px; margin: 40px 0 16px;">최신 뉴스 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(제목에서 코인이 감지되면 현재가·게시 후 등락 배지가 붙어요)</span></h2>
+    <div id="newsGrid" class="video-grid">
       <p class="loading-note">불러오는 중...</p>
     </div>
-    <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px;">출처: CoinDesk · Cointelegraph RSS · 번역 없이 원문 그대로 보여드려요.</p>
+    <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px;">출처: CoinDesk · Cointelegraph RSS · 번역 없이 원문 그대로 보여드려요. 코인 배지는 제목에서 자동으로 감지한 것이라 정확하지 않을 수 있어요.</p>
   </div>
 </section>
 
