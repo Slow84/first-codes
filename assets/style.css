@@ -848,6 +848,12 @@ textarea.comment-field { resize: vertical; margin-top: 10px; }
 .highlight-title { flex: 1 1 200px; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.35; }
 .highlight-time { font-size: 11px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
 
+/* 게시 후 등락폭이 5% 이상인 "급등락" 뉴스 강조 — 방향(급등/급락) 상관없이
+   동일하게 표시(둘 다 빠르게 대응해야 하는 신호라서 색을 굳이 안 나눔) */
+.video-card.price-spike, .highlight-row.price-spike { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+.archive-title-link { color: var(--text); text-decoration: none; font-size: 12.5px; font-weight: 600; }
+.archive-title-link:hover { color: var(--accent); }
+
 /* sitemap directory page */
 .sitemap-section { margin-bottom: 36px; }
 .sitemap-section h2 { font-size: 18px; margin-bottom: 16px; }

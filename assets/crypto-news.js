@@ -136,6 +136,10 @@
   // 게 "빨리 알고 대응하기"라는 원래 목적에 더 맞음.
   var HIGHLIGHT_MIN_ABS_PCT = 0.5;
   var HIGHLIGHT_COUNT = 8;
+  // "급등락" attention threshold — direction doesn't matter here (a -5%
+  // plunge needs just as fast a reaction as a +5% pump), so both get the
+  // same red-border treatment rather than color-coding by up/down.
+  var SPIKE_THRESHOLD_PCT = 5;
 
   function renderHighlights(scored) {
     var panel = document.getElementById('newsHighlights');
@@ -149,7 +153,8 @@
       return;
     }
     panel.innerHTML = picked.map(function (s) {
-      return '<a class="highlight-row" href="' + escapeHtml(s.item.link) + '" target="_blank" rel="noopener">' +
+      var spike = Math.abs(s.pct) >= SPIKE_THRESHOLD_PCT ? ' price-spike' : '';
+      return '<a class="highlight-row' + spike + '" href="' + escapeHtml(s.item.link) + '" target="_blank" rel="noopener">' +
         '<span class="coin-tag">' + escapeHtml(s.coin.symbol.toUpperCase()) + '</span>' +
         pctSpan(s.pct) +
         '<span class="highlight-title">' + escapeHtml(s.item.title) + '</span>' +
@@ -158,26 +163,60 @@
     }).join('');
   }
 
+  // grid focuses on "현황판" — what's happening right now — so only very
+  // fresh articles get a full card; anything older moves to the archive
+  // table at the bottom instead of cluttering the main view.
+  var FRESH_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+  function renderArchive(items) {
+    var el = document.getElementById('newsArchive');
+    if (!el) return;
+    // RSS gives us no popularity/view-count signal at all (CoinDesk/
+    // Cointelegraph don't publish one) — so this is ordered by recency,
+    // not "많이 본" — flagged to the user rather than faking a view count.
+    var top10 = items.slice(0, 10);
+    if (!top10.length) { el.innerHTML = '<tr><td colspan="3" class="loading-note">더 지난 뉴스가 없어요</td></tr>'; return; }
+    el.innerHTML = top10.map(function (n) {
+      return '<tr>' +
+        '<td><a class="archive-title-link" href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener">' + escapeHtml(n.title) + '</a></td>' +
+        '<td class="cell-muted">' + escapeHtml(n.source) + '</td>' +
+        '<td class="cell-muted">' + timeAgo(n.pubDate) + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
   function renderNews(items, coins) {
     if (!items || !items.length) {
       grid.innerHTML = '<p class="loading-note">불러올 뉴스가 없어요.</p>';
       return;
     }
-    grid.innerHTML = items.map(function (n, i) {
-      var thumb = n.image
-        ? '<img class="video-thumb" src="' + escapeHtml(n.image) + '" alt="" loading="lazy">'
-        : '<div class="video-thumb"></div>';
-      var matched = coins && coins.length ? matchCoin(n.title, coins) : null;
-      return '<a class="video-card" href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener">' +
-        thumb +
-        '<div class="video-body">' +
-        '<div class="video-title">' + escapeHtml(n.title) + '</div>' +
-        '<div class="video-meta">' + escapeHtml(n.source) + ' · ' + timeAgo(n.pubDate) + '</div>' +
-        '<div data-badge-slot="' + i + '"' + (matched ? ' data-coin-id="' + escapeHtml(matched.id) + '"' : '') + '>' +
-        (matched ? coinBadgeHtml(matched, null) : '') +
-        '</div>' +
-        '</div></a>';
-    }).join('');
+    var now = Date.now();
+    var freshItems = items.filter(function (n) { return now - new Date(n.pubDate).getTime() <= FRESH_WINDOW_MS; });
+    var olderItems = items.filter(function (n) { return now - new Date(n.pubDate).getTime() > FRESH_WINDOW_MS; });
+
+    if (!freshItems.length) {
+      grid.innerHTML = '<p class="loading-note">최근 2시간 이내 올라온 뉴스가 없어요. 아래 표에서 그 이전 뉴스를 볼 수 있어요.</p>';
+    } else {
+      grid.innerHTML = freshItems.map(function (n) {
+        var thumb = n.image
+          ? '<img class="video-thumb" src="' + escapeHtml(n.image) + '" alt="" loading="lazy">'
+          : '<div class="video-thumb"></div>';
+        var matched = coins && coins.length ? matchCoin(n.title, coins) : null;
+        // keyed by link (not array index) so it still resolves correctly
+        // after this array is filtered down from the full 40-item list.
+        return '<a class="video-card" href="' + escapeHtml(n.link) + '" target="_blank" rel="noopener">' +
+          thumb +
+          '<div class="video-body">' +
+          '<div class="video-title">' + escapeHtml(n.title) + '</div>' +
+          '<div class="video-meta">' + escapeHtml(n.source) + ' · ' + timeAgo(n.pubDate) + '</div>' +
+          '<div data-badge-link="' + escapeHtml(n.link) + '"' + (matched ? ' data-coin-id="' + escapeHtml(matched.id) + '"' : '') + '>' +
+          (matched ? coinBadgeHtml(matched, null) : '') +
+          '</div>' +
+          '</div></a>';
+      }).join('');
+    }
+
+    renderArchive(olderItems);
 
     var highlightsPanel = document.getElementById('newsHighlights');
     if (!coins || !coins.length) {
@@ -185,18 +224,20 @@
       return;
     }
 
-    // fill in "게시 후" badges once each matched coin's anchor price
-    // resolves, AND collect the same results to rank the highlights panel
-    // above — one fetch pass feeds both, so switching tabs/scrolling
-    // doesn't trigger it twice.
+    // highlight ranking still considers the FULL article pool (not just
+    // the 2-hour-fresh grid) — a real move can take longer than 2 hours to
+    // fully play out, so narrowing this too would hide genuinely relevant
+    // signals. Only the card grid above is scoped to "right now."
+    var slotByLink = {};
+    grid.querySelectorAll('[data-badge-link][data-coin-id]').forEach(function (el) {
+      slotByLink[el.getAttribute('data-badge-link')] = el;
+    });
+
     var matchedEntries = [];
-    items.forEach(function (n, i) {
-      var slot = grid.querySelector('[data-badge-slot="' + i + '"][data-coin-id]');
-      if (!slot) return;
-      var coinId = slot.getAttribute('data-coin-id');
-      var coin = coins.find(function (c) { return c.id === coinId; });
-      if (!coin) return;
-      matchedEntries.push({ item: n, coin: coin, slot: slot });
+    items.forEach(function (n) {
+      var matched = matchCoin(n.title, coins);
+      if (!matched) return;
+      matchedEntries.push({ item: n, coin: matched, slot: slotByLink[n.link] || null });
     });
 
     if (!matchedEntries.length) { renderHighlights([]); return; }
@@ -205,7 +246,13 @@
       return fetchAnchorPrice(entry.coin.id, new Date(entry.item.pubDate).getTime()).then(function (anchor) {
         if (anchor == null || !entry.coin.current_price) return null;
         var pct = (entry.coin.current_price - anchor) / anchor * 100;
-        entry.slot.innerHTML = coinBadgeHtml(entry.coin, pct);
+        if (entry.slot) {
+          entry.slot.innerHTML = coinBadgeHtml(entry.coin, pct);
+          if (Math.abs(pct) >= SPIKE_THRESHOLD_PCT) {
+            var card = entry.slot.closest('.video-card');
+            if (card) card.classList.add('price-spike');
+          }
+        }
         return { item: entry.item, coin: entry.coin, pct: pct };
       });
     });
