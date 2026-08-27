@@ -243,7 +243,7 @@
       var newSupply = data.series.newSupply ? data.series.newSupply[y] : null;
       var proj = data.newSupplyProjection;
       var newSupplyNote = (proj && proj.year === y)
-        ? ' <span style="color:var(--text-muted); font-weight:500;">(' + proj.monthsUsed + '월까지, 연말 예상 ' + fmtNum(proj.estimate, 0) + ')</span>'
+        ? '<div style="color:var(--text-muted); font-weight:500; font-size:11px; white-space:normal; max-width:120px; margin-top:2px;">' + proj.monthsUsed + '월까지 · 연말 예상 ' + fmtNum(proj.estimate, 0) + '</div>'
         : '';
       return '<tr>' +
         '<td><strong>' + y + '</strong></td>' +
