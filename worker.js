@@ -363,6 +363,38 @@ async function fetchRoneApartmentIndex(env) {
   }
 }
 
+// 한국 M2 통화량 — 한국은행 ECOS Open API. STAT_CODE=161Y006(M2 상품별 구성
+// 내역, 평잔·원계열)의 ITEM_CODE1=BBHA00 항목이 M2 총량 자체임 — 둘 다
+// StatisticTableList/StatisticSearch API로 직접 조회해서 확인한 값
+// (BBHA01~ 이후 코드들은 현금통화·요구불예금 등 M2를 구성하는 하위 항목이라
+// 총량이 아님). 응답 단위가 "십억원"이라 표에서 쓰는 "조원" 단위로 맞추려면
+// 1000으로 나눠야 함. ECOS도 R-ONE과 마찬가지로 reb.or.kr이 아니라
+// ecos.bok.or.kr에 별도 가입해서 키를 받아야 하고, CORS도 지원 안 해서
+// 서버에서 대신 호출.
+const ECOS_API_URL = 'https://ecos.bok.or.kr/api/StatisticSearch';
+
+async function fetchEcosM2(env) {
+  if (!env.ECOS_API_KEY) return null; // 키 없으면 이 열만 조용히 비움(수동입력값으로 대체됨) — 나머지 지표는 정상 표시
+  try {
+    const endYear = new Date().getFullYear() + 1;
+    const url = ECOS_API_URL + '/' + env.ECOS_API_KEY + '/json/kr/1/1000/161Y006/M/199001/' + endYear + '12/BBHA00/';
+    const r = await fetch(url);
+    const data = await r.json();
+    const rows = data.StatisticSearch && data.StatisticSearch.row;
+    if (!rows) return null;
+    const byYear = {};
+    rows.forEach(function (row) {
+      const time = String(row.TIME || '');
+      const year = time.slice(0, 4);
+      const value = parseFloat(row.DATA_VALUE);
+      if (year.length === 4 && !isNaN(value)) byYear[year] = value / 1000; // 십억원 -> 조원, 같은 해 안 마지막 관측치가 이전 값을 덮어씀
+    });
+    return byYear;
+  } catch (e) {
+    return null;
+  }
+}
+
 function yearlyFromCsv(csvText) {
   const lines = csvText.trim().split('\n').slice(1); // drop header row
   const byYear = {};
@@ -408,15 +440,21 @@ async function handleRealEstateIndicators(env) {
     labels.krHousing = '한국 아파트 매매가격지수(한국부동산원)';
   }
 
-  // 한국 M2 — no free auto-updating source was found (한국은행 ECOS needs its
-  // own API key, and the one FRED had for this stopped updating in 2017),
-  // so the admin looks up the current figure on ECOS by hand and posts it
-  // via POST /api/real-estate-indicators-manual. Merged in here as its own
-  // series, clearly labeled as manually maintained (see label below).
-  const manualRaw = await env.DATA.get(RE_MANUAL_KR_M2_KEY);
-  if (manualRaw) {
-    series.krM2 = JSON.parse(manualRaw);
-    labels.krM2 = '한국 M2 통화량(수동입력, 조원)';
+  // 한국 M2 — 처음엔 무료 자동갱신 소스를 못 찾아서(ECOS는 자체 키 필요,
+  // FRED의 대체 시리즈는 2017년에 멈춤) 관리자가 손으로 입력하는 방식으로
+  // 시작했는데, 이후 ECOS도 R-ONE처럼 직접 가입하면 키를 받을 수 있는 걸
+  // 확인해서 자동조회로 교체함. 키가 없거나 조회가 실패하면 그동안 입력해둔
+  // 수동값으로 자동 대체(fallback)됨 — 완전히 끊기진 않게.
+  const ecosM2 = await fetchEcosM2(env);
+  if (ecosM2 && Object.keys(ecosM2).length) {
+    series.krM2 = ecosM2;
+    labels.krM2 = '한국 M2 통화량(한국은행 ECOS, 조원)';
+  } else {
+    const manualRaw = await env.DATA.get(RE_MANUAL_KR_M2_KEY);
+    if (manualRaw) {
+      series.krM2 = JSON.parse(manualRaw);
+      labels.krM2 = '한국 M2 통화량(수동입력, 조원)';
+    }
   }
 
   const allYears = new Set();
@@ -427,7 +465,7 @@ async function handleRealEstateIndicators(env) {
     years: years,
     labels: labels,
     series: series,
-    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. 한국 아파트 매매가격지수: 한국부동산원 R-ONE Open API, 전국주택가격동향조사(월). 한국 M2: 한국은행 ECOS, 관리자가 직접 조회해서 입력한 수치.'
+    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. 한국 아파트 매매가격지수: 한국부동산원 R-ONE Open API, 전국주택가격동향조사(월). 한국 M2: 한국은행 ECOS Open API, 통화 및 유동성지표(월) — 자동조회 실패 시에는 관리자가 직접 입력한 수치로 대체됨.'
   });
   await env.DATA.put(RE_INDICATORS_CACHE_KEY, text, { expirationTtl: 60 * 60 * 24 }); // 24h — these are mostly monthly/quarterly series, no need to refetch more often
   return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });

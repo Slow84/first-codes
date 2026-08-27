@@ -4,4 +4,8 @@ worker.js
 .claude
 .gitignore
 .assetsignore
+.wrangler
+partnership-form.html
+*.exe
+*.msi
 MD
