@@ -122,7 +122,7 @@
 
     <div class="callout" style="margin-top: 20px;">
       <strong>ℹ 참고</strong>
-      대출한도(LTV·DSR) 계산, 역세권·학군·상권 같은 입지 조건은 아직 준비 중이에요. 지금은 "이 지역에서, 이 예산으로 살 수 있는 아파트가 실제로 뭐가 있는지"만 확인할 수 있어요. 지도는 별도 API 없이, 결과 각 줄의 "네이버지도에서 보기" 링크로 확인해요.
+      대출한도(LTV·DSR) 계산, 역세권·학군·상권 같은 입지 조건은 아직 준비 중이에요. 지금은 "이 지역에서, 이 예산으로 살 수 있는 아파트가 실제로 뭐가 있는지"만 확인할 수 있어요. 매물 정보는 별도 API 없이, 결과 각 줄의 "네이버부동산에서 보기" 링크로 확인해요.
     </div>
 
     <div class="chart-card" style="margin-top: 28px; max-width: 560px; padding: 24px;">
@@ -145,7 +145,7 @@
 
     <div class="table-wrap" style="margin-top:12px;">
       <table class="data-table" id="resultTable" style="display:none;">
-        <thead><tr><th>아파트</th><th>동</th><th>전용면적(㎡)</th><th>층</th><th>준공연도</th><th>거래가</th><th>거래일</th><th>지도</th></tr></thead>
+        <thead><tr><th>아파트</th><th>동</th><th>전용면적(㎡)</th><th>층</th><th>준공연도</th><th>거래가</th><th>거래일</th><th>매물</th></tr></thead>
         <tbody id="resultBody"></tbody>
       </table>
     </div>
@@ -241,9 +241,9 @@
         body.innerHTML = data.items.map(function (it) {
           // 국토부 원본 데이터의 아파트명에 "청담2차이-편한세상(201동,202동,203동)"처럼
           // 동번호가 괄호로 붙어있는 경우가 있어서, 검색어에서는 그 괄호 부분을 빼야
-          // 네이버지도가 정상적으로 찾음(괄호 안 "동,동,동" 나열은 실제 주소/이름이 아님).
+          // 정상적으로 찾음(괄호 안 "동,동,동" 나열은 실제 주소/이름이 아님).
           var searchName = it.name.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
-          var mapUrl = 'https://map.naver.com/p/search/' + encodeURIComponent(searchName + ' ' + it.dong);
+          var mapUrl = 'https://new.land.naver.com/search?query=' + encodeURIComponent(searchName + ' ' + it.dong);
           return '<tr>' +
             '<td><strong>' + it.name + '</strong></td>' +
             '<td>' + it.dong + '</td>' +
@@ -252,7 +252,7 @@
             '<td>' + it.buildYear + '</td>' +
             '<td>' + fmtEok(it.dealAmount) + '</td>' +
             '<td>' + it.dealDate + '</td>' +
-            '<td><a href="' + mapUrl + '" target="_blank" rel="noopener" class="news-link">네이버지도</a></td>' +
+            '<td><a href="' + mapUrl + '" target="_blank" rel="noopener" class="news-link">네이버부동산</a></td>' +
             '</tr>';
         }).join('');
         table.style.display = '';
