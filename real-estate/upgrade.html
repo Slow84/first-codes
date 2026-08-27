@@ -147,7 +147,7 @@
       <table class="data-table" id="resultTable" style="display:none;">
         <thead><tr>
           <th data-sort="dong">동</th>
-          <th data-sort="name">아파트</th>
+          <th data-sort="name" style="text-align:left;">아파트</th>
           <th data-sort="area">전용면적(㎡)</th>
           <th data-sort="floor">층</th>
           <th data-sort="buildYear">준공연도</th>
@@ -253,7 +253,7 @@
     }
     return '<tr>' +
       '<td>' + it.dong + '</td>' +
-      '<td><strong>' + it.name + '</strong></td>' +
+      '<td style="text-align:left;"><strong>' + it.name + '</strong></td>' +
       '<td>' + it.area.toFixed(1) + '</td>' +
       '<td>' + it.floor + '층</td>' +
       '<td>' + it.buildYear + '</td>' +
