@@ -170,20 +170,17 @@
     <h2 style="font-size: 17px; margin: 40px 0 16px;">연도별 지표 한눈에 보기 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(각 연도의 마지막 관측치 기준)</span></h2>
     <div class="table-wrap">
       <table class="data-table" id="reIndicatorTable">
-        <thead><tr><th>연도</th><th>원/달러 환율</th><th>미국 기준금리</th><th>미국 10년물 국채금리</th><th>미국 M2(십억달러)</th><th>한국 아파트 매매가격지수</th><th>한국 M2(조원)</th></tr></thead>
-        <tbody id="reIndicatorBody"><tr><td colspan="7" class="loading-note">불러오는 중...</td></tr></tbody>
+        <thead><tr><th>연도</th><th>원/달러 환율</th><th>미국 기준금리</th><th>미국 10년물 국채금리</th><th>미국 M2(십억달러)</th><th>한국 아파트 매매가격지수</th><th>한국 M2(조원)</th><th>주택 매매심리지수</th><th>주택담보대출 금리</th><th>가계신용(조원)</th></tr></thead>
+        <tbody id="reIndicatorBody"><tr><td colspan="10" class="loading-note">불러오는 중...</td></tr></tbody>
       </table>
     </div>
     <div id="reIndicatorMore" style="margin-top: 10px;"></div>
     <p style="font-size: 11.5px; color: var(--text-muted); margin-top: 10px; max-width: 640px;" id="reIndicatorCitation"></p>
 
-    <h2 style="font-size: 17px; margin: 40px 0 16px;">갈아타기 판단에 같이 볼 만한 지표</h2>
+    <h2 style="font-size: 17px; margin: 40px 0 16px;">갈아타기 판단에 같이 볼 만한 지표 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(아직 표에 자동 반영은 안 된 지표)</span></h2>
     <ul style="font-size: 14.5px; padding-left: 20px; margin: 0; max-width: 640px;">
       <li style="margin-bottom: 10px;"><strong>전세가율</strong> — 매매가 대비 전세가 비율. 높으면 실수요가 튼튼하다는 신호로 보고, 낮으면 갭투자·버블 신호로 보는 경우가 많아요.</li>
       <li style="margin-bottom: 10px;"><strong>미분양·입주예정 물량</strong> — 지역별 새 아파트 공급량. 미분양이 늘면 그 지역 시세가 눌릴 가능성이 커요.</li>
-      <li style="margin-bottom: 10px;"><strong>가계부채 · DSR 규제</strong> — 대출 한도 규제가 바뀌면 매수 여력이 바로 바뀌어요.</li>
-      <li style="margin-bottom: 10px;"><strong>주택담보대출 금리</strong> — 기준금리보다 실제 갈아타기 의사결정엔 이게 더 직접적이에요.</li>
-      <li style="margin-bottom: 10px;"><strong>매매심리지수</strong> — 한국부동산원이 매주 발표하는, "지금 사려는 사람이 많은지"를 보여주는 체감지표예요.</li>
     </ul>
   </div>
 </section>
@@ -233,6 +230,9 @@
       var m2 = data.series.m2 ? data.series.m2[y] : null;
       var krHousing = data.series.krHousing ? data.series.krHousing[y] : null;
       var krM2 = data.series.krM2 ? data.series.krM2[y] : null;
+      var sentiment = data.series.sentiment ? data.series.sentiment[y] : null;
+      var mortgageRate = data.series.mortgageRate ? data.series.mortgageRate[y] : null;
+      var householdCredit = data.series.householdCredit ? data.series.householdCredit[y] : null;
       return '<tr>' +
         '<td><strong>' + y + '</strong></td>' +
         '<td>' + fmtNum(usdkrw, 1) + yoyBadge(data.series.usdkrw, data.years, i) + '</td>' +
@@ -241,6 +241,9 @@
         '<td>' + fmtNum(m2, 0) + yoyBadge(data.series.m2, data.years, i) + '</td>' +
         '<td>' + fmtNum(krHousing, 2) + yoyBadge(data.series.krHousing, data.years, i) + '</td>' +
         '<td>' + fmtNum(krM2, 0) + yoyBadge(data.series.krM2, data.years, i) + '</td>' +
+        '<td>' + fmtNum(sentiment, 1) + yoyBadge(data.series.sentiment, data.years, i) + '</td>' +
+        '<td>' + fmtNum(mortgageRate, 2) + '%</td>' +
+        '<td>' + fmtNum(householdCredit, 0) + yoyBadge(data.series.householdCredit, data.years, i) + '</td>' +
         '</tr>';
     }).join('');
 
@@ -264,7 +267,7 @@
       document.getElementById('reIndicatorCitation').textContent = data.citation || '';
     })
     .catch(function () {
-      document.getElementById('reIndicatorBody').innerHTML = '<tr><td colspan="7" class="loading-note">불러오지 못했어요.</td></tr>';
+      document.getElementById('reIndicatorBody').innerHTML = '<tr><td colspan="10" class="loading-note">불러오지 못했어요.</td></tr>';
     });
 })();
 </script>

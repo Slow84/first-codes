@@ -331,16 +331,21 @@ const RE_INDICATOR_SERIES = [
 // 않아 서버에서 대신 호출.
 const RONE_API_URL = 'https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do';
 
-async function fetchRoneApartmentIndex(env) {
+// 공용 R-ONE 조회 함수 — STATBL_ID(통계표)/CLS_ID(지역)/ITM_ID(항목)만 바꿔서
+// 여러 R-ONE 통계에 재사용. 전부 SttsApiTbl.do(통계표 목록 API)로 직접 조회해서
+// 확인한 값 (아파트 매매가격지수=A_2024_00045/500001/100001, 주택 매매심리지수
+// (국토연구원 조사, R-ONE 경유 배포)=T232543129897499/50004/10001, 둘 다
+// CLS_ID는 "전국" 항목).
+async function fetchRoneSeries(env, statblId, clsId, itmId) {
   if (!env.RONE_API_KEY) return null; // 키 없으면 이 열만 조용히 비움 — 나머지 지표는 정상 표시
   try {
     const endYear = new Date().getFullYear() + 1;
     const params = new URLSearchParams({
       KEY: env.RONE_API_KEY,
-      STATBL_ID: 'A_2024_00045',
+      STATBL_ID: statblId,
       DTACYCLE_CD: 'MM',
-      CLS_ID: '500001',
-      ITM_ID: '100001',
+      CLS_ID: clsId,
+      ITM_ID: itmId,
       START_WRTTIME: '200301',
       END_WRTTIME: endYear + '12',
       Type: 'json',
@@ -395,6 +400,57 @@ async function fetchEcosM2(env) {
   }
 }
 
+// 주택담보대출 금리 — ECOS STAT_CODE=121Y006(예금은행 대출금리, 신규취급액
+// 기준)의 ITEM_CODE1=BECBLA0302 항목이 "주택담보대출" — StatisticItemList
+// API로 직접 조회해서 확인한 값. 단위가 이미 "연리%"라 별도 변환 불필요.
+async function fetchEcosMortgageRate(env) {
+  if (!env.ECOS_API_KEY) return null;
+  try {
+    const endYear = new Date().getFullYear() + 1;
+    const url = ECOS_API_URL + '/' + env.ECOS_API_KEY + '/json/kr/1/1000/121Y006/M/199001/' + endYear + '12/BECBLA0302/';
+    const r = await fetch(url);
+    const data = await r.json();
+    const rows = data.StatisticSearch && data.StatisticSearch.row;
+    if (!rows) return null;
+    const byYear = {};
+    rows.forEach(function (row) {
+      const time = String(row.TIME || '');
+      const year = time.slice(0, 4);
+      const value = parseFloat(row.DATA_VALUE);
+      if (year.length === 4 && !isNaN(value)) byYear[year] = value;
+    });
+    return byYear;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 가계부채(가계신용) — ECOS STAT_CODE=151Y001(가계신용, 업권별, 분기)의
+// ITEM_CODE1=1000000 항목이 가계신용 총액 — StatisticItemList API로 직접
+// 조회해서 확인한 값. 분기 시리즈라 시점 형식이 "YYYYQ#"이고(월별과 다름),
+// 응답 단위가 "십억원"이라 "조원"으로 맞추려면 1000으로 나눠야 함.
+async function fetchEcosHouseholdCredit(env) {
+  if (!env.ECOS_API_KEY) return null;
+  try {
+    const endYear = new Date().getFullYear() + 1;
+    const url = ECOS_API_URL + '/' + env.ECOS_API_KEY + '/json/kr/1/1000/151Y001/Q/2002Q1/' + endYear + 'Q4/1000000/';
+    const r = await fetch(url);
+    const data = await r.json();
+    const rows = data.StatisticSearch && data.StatisticSearch.row;
+    if (!rows) return null;
+    const byYear = {};
+    rows.forEach(function (row) {
+      const time = String(row.TIME || '');
+      const year = time.slice(0, 4);
+      const value = parseFloat(row.DATA_VALUE);
+      if (year.length === 4 && !isNaN(value)) byYear[year] = value / 1000; // 십억원 -> 조원, 같은 해 안 마지막 분기가 이전 분기를 덮어씀
+    });
+    return byYear;
+  } catch (e) {
+    return null;
+  }
+}
+
 function yearlyFromCsv(csvText) {
   const lines = csvText.trim().split('\n').slice(1); // drop header row
   const byYear = {};
@@ -434,10 +490,28 @@ async function handleRealEstateIndicators(env) {
   });
   if (!Object.keys(series).length) return json({ error: '지표 데이터를 가져오지 못했어요.' }, 502);
 
-  const roneHousing = await fetchRoneApartmentIndex(env);
+  const roneHousing = await fetchRoneSeries(env, 'A_2024_00045', '500001', '100001');
   if (roneHousing && Object.keys(roneHousing).length) {
     series.krHousing = roneHousing;
     labels.krHousing = '한국 아파트 매매가격지수(한국부동산원)';
+  }
+
+  const sentiment = await fetchRoneSeries(env, 'T232543129897499', '50004', '10001');
+  if (sentiment && Object.keys(sentiment).length) {
+    series.sentiment = sentiment;
+    labels.sentiment = '주택 매매심리지수(국토연구원, 전국)';
+  }
+
+  const mortgageRate = await fetchEcosMortgageRate(env);
+  if (mortgageRate && Object.keys(mortgageRate).length) {
+    series.mortgageRate = mortgageRate;
+    labels.mortgageRate = '주택담보대출 금리(신규취급, %)';
+  }
+
+  const householdCredit = await fetchEcosHouseholdCredit(env);
+  if (householdCredit && Object.keys(householdCredit).length) {
+    series.householdCredit = householdCredit;
+    labels.householdCredit = '가계신용(한국은행, 조원)';
   }
 
   // 한국 M2 — 처음엔 무료 자동갱신 소스를 못 찾아서(ECOS는 자체 키 필요,
@@ -465,7 +539,7 @@ async function handleRealEstateIndicators(env) {
     years: years,
     labels: labels,
     series: series,
-    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. 한국 아파트 매매가격지수: 한국부동산원 R-ONE Open API, 전국주택가격동향조사(월). 한국 M2: 한국은행 ECOS Open API, 통화 및 유동성지표(월) — 자동조회 실패 시에는 관리자가 직접 입력한 수치로 대체됨.'
+    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. 한국 아파트 매매가격지수·주택 매매심리지수: 한국부동산원 R-ONE Open API(매매심리지수 원자료는 국토연구원 「부동산시장 소비자심리조사」). 한국 M2·주택담보대출 금리·가계신용: 한국은행 ECOS Open API — M2는 자동조회 실패 시에만 관리자가 직접 입력한 수치로 대체됨.'
   });
   await env.DATA.put(RE_INDICATORS_CACHE_KEY, text, { expirationTtl: 60 * 60 * 24 }); // 24h — these are mostly monthly/quarterly series, no need to refetch more often
   return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
