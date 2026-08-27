@@ -43,8 +43,8 @@
     });
   }
 
-  function commentRowHtml(c, isReply, isAdminView) {
-    var deletedNote = c.deleted ? '<span class="comment-deleted-tag">' + (isAdminView ? '삭제됨 (관리자만 원본 확인 가능)' : '삭제됨') + '</span>' : '';
+  function commentRowHtml(c, isReply) {
+    var deletedNote = c.deleted ? '<span class="comment-deleted-tag">삭제됨</span>' : '';
     return '<div class="comment-item' + (isReply ? ' comment-reply' : '') + (c.deleted ? ' comment-item-deleted' : '') + '" data-comment-id="' + escapeHtml(c.id) + '">' +
       '<div class="comment-item-head">' +
       '<span>' + escapeHtml(c.name) + deletedNote + '</span>' +
@@ -66,11 +66,10 @@
       el.innerHTML = '<p class="comment-empty">아직 댓글이 없어요. 첫 댓글을 남겨보세요!</p>';
       return;
     }
-    var isAdminView = !!getAdminKey();
     var threads = buildThreads(list);
     el.innerHTML = threads.map(function (t) {
-      return commentRowHtml(t.root, false, isAdminView) +
-        t.replies.map(function (r) { return commentRowHtml(r, true, isAdminView); }).join('');
+      return commentRowHtml(t.root, false) +
+        t.replies.map(function (r) { return commentRowHtml(r, true); }).join('');
     }).join('');
   }
 
