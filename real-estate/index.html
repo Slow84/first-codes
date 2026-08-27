@@ -205,12 +205,28 @@
     return v.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   }
 
+  // years[] is sorted most-recent-first, so "1 year earlier" than years[i]
+  // is years[i+1] — not always a clean calendar year-over-year gap if a
+  // series has a missing year, but close enough for a quick glance.
+  function yoyBadge(byYear, years, i) {
+    if (!byYear) return '';
+    var cur = byYear[years[i]];
+    var prevYear = years[i + 1];
+    var prev = prevYear ? byYear[prevYear] : null;
+    if (cur == null || prev == null || prev === 0) return '';
+    var pct = (cur - prev) / Math.abs(prev) * 100;
+    var cls = pct >= 0 ? 'up' : 'down';
+    var sign = pct >= 0 ? '+' : '';
+    return ' <span class="rank-change ' + cls + '" style="font-size:11px;">' + sign + pct.toFixed(1) + '%</span>';
+  }
+
   function render(data) {
     var body = document.getElementById('reIndicatorBody');
     var moreWrap = document.getElementById('reIndicatorMore');
     var years = showAll ? data.years : data.years.slice(0, DEFAULT_YEARS);
 
     body.innerHTML = years.map(function (y) {
+      var i = data.years.indexOf(y); // index within the FULL year list, so YoY can look one past the visible slice's last row
       var usdkrw = data.series.usdkrw ? data.series.usdkrw[y] : null;
       var fedRate = data.series.fedRate ? data.series.fedRate[y] : null;
       var us10y = data.series.us10y ? data.series.us10y[y] : null;
@@ -218,11 +234,11 @@
       var krHousing = data.series.krHousing ? data.series.krHousing[y] : null;
       return '<tr>' +
         '<td><strong>' + y + '</strong></td>' +
-        '<td>' + fmtNum(usdkrw, 1) + '</td>' +
+        '<td>' + fmtNum(usdkrw, 1) + yoyBadge(data.series.usdkrw, data.years, i) + '</td>' +
         '<td>' + fmtNum(fedRate, 2) + '%</td>' +
         '<td>' + fmtNum(us10y, 2) + '%</td>' +
-        '<td>' + fmtNum(m2, 0) + '</td>' +
-        '<td>' + fmtNum(krHousing, 2) + '</td>' +
+        '<td>' + fmtNum(m2, 0) + yoyBadge(data.series.m2, data.years, i) + '</td>' +
+        '<td>' + fmtNum(krHousing, 2) + yoyBadge(data.series.krHousing, data.years, i) + '</td>' +
         '</tr>';
     }).join('');
 
