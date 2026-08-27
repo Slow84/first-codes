@@ -136,7 +136,7 @@
       </div>
       <p style="font-size:13.5px; color:var(--text-muted); margin:0 0 16px;">합산 예산: <strong id="totalBudget" style="color:var(--text);">0억원</strong></p>
       <label style="display:block; font-size:13px; font-weight:600; color:var(--text-muted); margin-bottom:16px;">관심 지역
-        <select id="regionSelect" class="comment-field" style="margin-top:6px;"></select>
+        <select id="regionSelect" class="comment-field" style="margin-top:6px; text-align:center; text-align-last:center;"></select>
       </label>
       <button type="button" id="searchBtn" class="pill-btn accent" style="width:100%; padding:12px;">이 예산으로 아파트 찾기</button>
     </div>
@@ -239,7 +239,11 @@
         }
         status.textContent = '최근 3개월(' + data.months.slice().reverse().join(', ') + ') 실거래 기준, 예산 이내 ' + data.items.length + '건 (가격 높은 순)';
         body.innerHTML = data.items.map(function (it) {
-          var mapUrl = 'https://map.naver.com/p/search/' + encodeURIComponent(it.name + ' ' + it.dong);
+          // 국토부 원본 데이터의 아파트명에 "청담2차이-편한세상(201동,202동,203동)"처럼
+          // 동번호가 괄호로 붙어있는 경우가 있어서, 검색어에서는 그 괄호 부분을 빼야
+          // 네이버지도가 정상적으로 찾음(괄호 안 "동,동,동" 나열은 실제 주소/이름이 아님).
+          var searchName = it.name.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+          var mapUrl = 'https://map.naver.com/p/search/' + encodeURIComponent(searchName + ' ' + it.dong);
           return '<tr>' +
             '<td><strong>' + it.name + '</strong></td>' +
             '<td>' + it.dong + '</td>' +
