@@ -336,7 +336,11 @@ const RONE_API_URL = 'https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do';
 // 확인한 값 (아파트 매매가격지수=A_2024_00045/500001/100001, 주택 매매심리지수
 // (국토연구원 조사, R-ONE 경유 배포)=T232543129897499/50004/10001, 둘 다
 // CLS_ID는 "전국" 항목).
-async function fetchRoneSeries(env, statblId, clsId, itmId) {
+// aggregate: 'last'(기본) = 그 해 마지막 달 값(지수·금리·재고 같은 "특정 시점
+// 스냅샷" 지표에 맞음), 'sum' = 그 해 12개월 합계(분양세대수처럼 "그 달에
+// 새로 생긴 양"을 더해야 "연간 물량"이 되는 지표에 맞음 — 12월 값만 쓰면 그
+// 해 마지막 달 한 달치만 보여주는 셈이라 틀린 숫자가 됨).
+async function fetchRoneSeries(env, statblId, clsId, itmId, aggregate) {
   if (!env.RONE_API_KEY) return null; // 키 없으면 이 열만 조용히 비움 — 나머지 지표는 정상 표시
   try {
     const endYear = new Date().getFullYear() + 1;
@@ -360,9 +364,36 @@ async function fetchRoneSeries(env, statblId, clsId, itmId) {
       const wt = String(row.WRTTIME_IDTFR_ID || '');
       const year = wt.slice(0, 4);
       const value = parseFloat(row.DTA_VAL);
-      if (year.length === 4 && !isNaN(value)) byYear[year] = value; // 같은 해 안에서는 더 늦은 달이 이전 값을 덮어씀 -> 그 해의 마지막 관측치
+      if (year.length !== 4 || isNaN(value)) return;
+      if (aggregate === 'sum') byYear[year] = (byYear[year] || 0) + value;
+      else byYear[year] = value; // 같은 해 안에서는 더 늦은 달이 이전 값을 덮어씀 -> 그 해의 마지막 관측치
     });
     return byYear;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 미분양주택현황처럼 통계표 자체에 "전국" 합계 행이 없고 시도별 행만 있는
+// 경우, 시도 17곳(특별시·광역시·도)을 각각 fetchRoneSeries로 조회해서 연도별로
+// 더함 — CLS_ID는 SttsApiTblData 응답에서 CLS_FULLNM이 "OO>계"인 행들을 직접
+// 뒤져서 확인한 값.
+const RE_SIDO_CLS_IDS = ['50018', '50044', '50061', '50071', '50082', '50088', '50094', '50100', '50120', '50121', '50133', '50149', '50177', '50200', '50228', '50229', '50233'];
+
+async function fetchRoneNationwideSum(env, statblId, itmId) {
+  if (!env.RONE_API_KEY) return null;
+  try {
+    const perRegion = await Promise.all(RE_SIDO_CLS_IDS.map(function (clsId) {
+      return fetchRoneSeries(env, statblId, clsId, itmId);
+    }));
+    const byYear = {};
+    perRegion.forEach(function (regionByYear) {
+      if (!regionByYear) return;
+      Object.keys(regionByYear).forEach(function (year) {
+        byYear[year] = (byYear[year] || 0) + regionByYear[year];
+      });
+    });
+    return Object.keys(byYear).length ? byYear : null;
   } catch (e) {
     return null;
   }
@@ -514,6 +545,25 @@ async function handleRealEstateIndicators(env) {
     labels.householdCredit = '가계신용(한국은행, 조원)';
   }
 
+  // 신규 분양세대수 — 이 통계표는 드물게 전국 합계 행(CLS_ID=50001)이 이미
+  // 있어서 지역 합산이 필요 없음. 'sum'으로 넘기는 이유는 "분양물량"은
+  // 12월 한 달치 스냅샷이 아니라 그 해에 새로 분양된 세대를 다 더한
+  // 연간 누계라서 — last를 쓰면 12월 한 달치만 보여주는 잘못된 숫자가 됨.
+  const newSupply = await fetchRoneSeries(env, 'T244633134461863', '50001', '10001', 'sum');
+  if (newSupply && Object.keys(newSupply).length) {
+    series.newSupply = newSupply;
+    labels.newSupply = '신규 분양세대수(한국부동산원, 연간 합계)';
+  }
+
+  // 미분양주택현황 — 이 통계표는 전국 합계 행이 없어서 17개 시도를 각각
+  // 조회해서 더함(fetchRoneNationwideSum). 미분양은 "그 시점의 재고"라서
+  // 기본값인 'last'(그 해 마지막 달) 그대로 씀.
+  const unsold = await fetchRoneNationwideSum(env, 'T237973129847263', '10001');
+  if (unsold && Object.keys(unsold).length) {
+    series.unsold = unsold;
+    labels.unsold = '미분양주택현황(한국부동산원, 연말 기준)';
+  }
+
   // 한국 M2 — 처음엔 무료 자동갱신 소스를 못 찾아서(ECOS는 자체 키 필요,
   // FRED의 대체 시리즈는 2017년에 멈춤) 관리자가 손으로 입력하는 방식으로
   // 시작했는데, 이후 ECOS도 R-ONE처럼 직접 가입하면 키를 받을 수 있는 걸
@@ -539,7 +589,7 @@ async function handleRealEstateIndicators(env) {
     years: years,
     labels: labels,
     series: series,
-    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. 한국 아파트 매매가격지수·주택 매매심리지수: 한국부동산원 R-ONE Open API(매매심리지수 원자료는 국토연구원 「부동산시장 소비자심리조사」). 한국 M2·주택담보대출 금리·가계신용: 한국은행 ECOS Open API — M2는 자동조회 실패 시에만 관리자가 직접 입력한 수치로 대체됨.'
+    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. 한국 아파트 매매가격지수·주택 매매심리지수·신규 분양세대수·미분양주택현황: 한국부동산원 R-ONE Open API(매매심리지수 원자료는 국토연구원 「부동산시장 소비자심리조사」; 신규 분양세대수·미분양주택현황은 시도별 수치를 합산한 값). 한국 M2·주택담보대출 금리·가계신용: 한국은행 ECOS Open API — M2는 자동조회 실패 시에만 관리자가 직접 입력한 수치로 대체됨.'
   });
   await env.DATA.put(RE_INDICATORS_CACHE_KEY, text, { expirationTtl: 60 * 60 * 24 }); // 24h — these are mostly monthly/quarterly series, no need to refetch more often
   return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
