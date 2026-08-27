@@ -145,7 +145,17 @@
 
     <div class="table-wrap" style="margin-top:12px;">
       <table class="data-table" id="resultTable" style="display:none;">
-        <thead><tr><th>아파트</th><th>동</th><th>전용면적(㎡)</th><th>층</th><th>준공연도</th><th>거래가</th><th>거래일</th><th>역세권</th><th>지도</th></tr></thead>
+        <thead><tr>
+          <th data-sort="dong">동</th>
+          <th data-sort="name">아파트</th>
+          <th data-sort="area">전용면적(㎡)</th>
+          <th data-sort="floor">층</th>
+          <th data-sort="buildYear">준공연도</th>
+          <th data-sort="dealAmount">거래가</th>
+          <th data-sort="dealDate">거래일</th>
+          <th>역세권</th>
+          <th>지도</th>
+        </tr></thead>
         <tbody id="resultBody"></tbody>
       </table>
     </div>
@@ -211,22 +221,92 @@
   document.getElementById('cashInput').addEventListener('input', updateTotal);
   document.getElementById('loanInput').addEventListener('input', updateTotal);
 
+  var resultTable = document.getElementById('resultTable');
+  var resultBody = document.getElementById('resultBody');
+  var currentItems = [];
+  var sortKey = 'dealAmount';
+  var sortDir = -1; // -1 = 내림차순(비싼 순), 1 = 오름차순
+
+  function cellValue(it, key) {
+    switch (key) {
+      case 'dong': return it.dong || '';
+      case 'name': return it.name || '';
+      case 'area': return it.area || 0;
+      case 'floor': return parseInt(it.floor, 10) || 0;
+      case 'buildYear': return parseInt(it.buildYear, 10) || 0;
+      case 'dealAmount': return it.dealAmount || 0;
+      case 'dealDate': return it.dealDate || '';
+      default: return 0;
+    }
+  }
+
+  function renderRow(it) {
+    // 국토부 원본 데이터의 아파트명에 "청담2차이-편한세상(201동,202동,203동)"처럼
+    // 동번호가 괄호로 붙어있는 경우가 있어서, 검색어에서는 그 괄호 부분을 빼야
+    // 정상적으로 찾음(괄호 안 "동,동,동" 나열은 실제 주소/이름이 아님).
+    var searchName = it.name.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+    var mapUrl = 'https://map.naver.com/p/search/' + encodeURIComponent(searchName + ' ' + it.dong);
+    var subwayText = '—';
+    if (it.subway) {
+      var cls = it.subway.tier === '비역세권' ? '' : ' class="cell-warn"';
+      subwayText = '<span' + cls + '>' + it.subway.tier + '</span> <span class="cell-muted" style="font-size:11.5px;">(' + it.subway.station + ' ' + it.subway.distanceM + 'm)</span>';
+    }
+    return '<tr>' +
+      '<td>' + it.dong + '</td>' +
+      '<td><strong>' + it.name + '</strong></td>' +
+      '<td>' + it.area.toFixed(1) + '</td>' +
+      '<td>' + it.floor + '층</td>' +
+      '<td>' + it.buildYear + '</td>' +
+      '<td>' + fmtEok(it.dealAmount) + '</td>' +
+      '<td>' + it.dealDate + '</td>' +
+      '<td>' + subwayText + '</td>' +
+      '<td><a href="' + mapUrl + '" target="_blank" rel="noopener" class="news-link">네이버지도</a></td>' +
+      '</tr>';
+  }
+
+  function renderTable() {
+    var sorted = currentItems.slice().sort(function (a, b) {
+      var av = cellValue(a, sortKey), bv = cellValue(b, sortKey);
+      if (av < bv) return -1 * sortDir;
+      if (av > bv) return 1 * sortDir;
+      return 0;
+    });
+    resultBody.innerHTML = sorted.map(renderRow).join('');
+
+    resultTable.querySelectorAll('th[data-sort]').forEach(function (th) {
+      var key = th.getAttribute('data-sort');
+      th.classList.toggle('sorted', key === sortKey);
+      var arrow = th.querySelector('.sort-arrow');
+      if (arrow) arrow.remove();
+      if (key === sortKey) {
+        th.insertAdjacentHTML('beforeend', '<span class="sort-arrow">' + (sortDir === 1 ? '▲' : '▼') + '</span>');
+      }
+    });
+  }
+
+  resultTable.querySelectorAll('th[data-sort]').forEach(function (th) {
+    th.addEventListener('click', function () {
+      var key = th.getAttribute('data-sort');
+      if (sortKey === key) sortDir = -sortDir;
+      else { sortKey = key; sortDir = 1; }
+      renderTable();
+    });
+  });
+
   function search() {
     var cash = parseFloat(document.getElementById('cashInput').value) || 0;
     var loan = parseFloat(document.getElementById('loanInput').value) || 0;
     var budget = cash + loan;
     var status = document.getElementById('searchStatus');
-    var table = document.getElementById('resultTable');
-    var body = document.getElementById('resultBody');
 
     if (budget <= 0) {
       status.textContent = '현금 또는 대출 포함 금액을 먼저 입력해주세요.';
-      table.style.display = 'none';
+      resultTable.style.display = 'none';
       return;
     }
 
     status.textContent = '검색 중...';
-    table.style.display = 'none';
+    resultTable.style.display = 'none';
 
     var regionName = select.options[select.selectedIndex].text;
     fetch('/api/real-estate-search?lawdCd=' + encodeURIComponent(select.value) + '&budget=' + encodeURIComponent(budget) + '&regionName=' + encodeURIComponent(regionName))
@@ -235,38 +315,19 @@
         if (data.error) throw new Error(data.error);
         if (!data.items.length) {
           status.textContent = '이 예산으로는 최근 3개월간 이 지역에서 거래된 아파트가 없어요. 예산을 늘리거나 다른 지역을 선택해보세요.';
-          table.style.display = 'none';
+          resultTable.style.display = 'none';
           return;
         }
-        status.textContent = '최근 3개월(' + data.months.slice().reverse().join(', ') + ') 실거래 기준, 예산 이내 ' + data.items.length + '건 (가격 높은 순)';
-        body.innerHTML = data.items.map(function (it) {
-          // 국토부 원본 데이터의 아파트명에 "청담2차이-편한세상(201동,202동,203동)"처럼
-          // 동번호가 괄호로 붙어있는 경우가 있어서, 검색어에서는 그 괄호 부분을 빼야
-          // 정상적으로 찾음(괄호 안 "동,동,동" 나열은 실제 주소/이름이 아님).
-          var searchName = it.name.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
-          var mapUrl = 'https://map.naver.com/p/search/' + encodeURIComponent(searchName + ' ' + it.dong);
-          var subwayText = '—';
-          if (it.subway) {
-            var cls = it.subway.tier === '비역세권' ? '' : ' class="cell-warn"';
-            subwayText = '<span' + cls + '>' + it.subway.tier + '</span> <span class="cell-muted" style="font-size:11.5px;">(' + it.subway.station + ' ' + it.subway.distanceM + 'm)</span>';
-          }
-          return '<tr>' +
-            '<td><strong>' + it.name + '</strong></td>' +
-            '<td>' + it.dong + '</td>' +
-            '<td>' + it.area.toFixed(1) + '</td>' +
-            '<td>' + it.floor + '층</td>' +
-            '<td>' + it.buildYear + '</td>' +
-            '<td>' + fmtEok(it.dealAmount) + '</td>' +
-            '<td>' + it.dealDate + '</td>' +
-            '<td>' + subwayText + '</td>' +
-            '<td><a href="' + mapUrl + '" target="_blank" rel="noopener" class="news-link">네이버지도</a></td>' +
-            '</tr>';
-        }).join('');
-        table.style.display = '';
+        status.textContent = '최근 3개월(' + data.months.slice().reverse().join(', ') + ') 실거래 기준, 예산 이내 ' + data.items.length + '건 — 표 제목을 눌러서 정렬할 수 있어요.';
+        currentItems = data.items;
+        sortKey = 'dealAmount';
+        sortDir = -1;
+        renderTable();
+        resultTable.style.display = '';
       })
       .catch(function () {
         status.textContent = '검색에 실패했어요. 잠시 후 다시 시도해주세요.';
-        table.style.display = 'none';
+        resultTable.style.display = 'none';
       });
   }
 
