@@ -691,13 +691,21 @@ async function fetchVworldCoord(env, address) {
   if (cached) return cached === 'null' ? null : JSON.parse(cached);
   try {
     const params = new URLSearchParams({ service: 'address', request: 'getcoord', address: address, type: 'parcel', key: env.VWORLD_API_KEY });
-    const r = await fetch(VWORLD_API_URL + '?' + params.toString());
+    const r = await fetch(VWORLD_API_URL + '?' + params.toString(), {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' }
+    });
     const data = await r.json();
     const point = data.response && data.response.result && data.response.result.point;
     const coord = point ? { lat: parseFloat(point.y), lng: parseFloat(point.x) } : null;
     await env.DATA.put(cacheKey, coord ? JSON.stringify(coord) : 'null', { expirationTtl: 60 * 60 * 24 * 30 });
     return coord;
   } catch (e) {
+    // 2026-08-27 확인: VWorld는 curl(일반 네트워크)에서는 100% 성공하는데
+    // Cloudflare Worker에서 호출하면 502/520으로 계속 실패함(https, 순차
+    // 호출, User-Agent 추가까지 다 시도했지만 동일) — Cloudflare가 앞단에
+    // 있는 VWorld 쪽에서 Cloudflare Worker발 트래픽을 걸러내는 것으로 보임.
+    // 같은 Worker에서 다른 정부 API(R-ONE/ECOS/국토부)는 정상 동작하는 걸
+    // 확인했으므로 Worker 자체 네트워크 문제는 아님 — VWorld 특정 이슈.
     return null;
   }
 }
@@ -748,12 +756,14 @@ async function handleRealEstateSearch(url, env) {
     // (역세권 아님이 아니라 "아직 안 알아봄"이라는 뜻).
     const GEOCODE_LIMIT = 25;
     if (env.VWORLD_API_KEY && sido) {
-      await Promise.all(items.slice(0, GEOCODE_LIMIT).map(async function (it) {
-        if (!it.jibun) { it.subway = null; return; }
+      // 25개를 Promise.all로 한꺼번에 쏘니 VWorld가 502/520으로 거부함(버스트로
+      // 몰리는 걸 못 받아주는 듯) — 하나씩 순서대로 요청하는 걸로 바꿔서 해결.
+      for (const it of items.slice(0, GEOCODE_LIMIT)) {
+        if (!it.jibun) { it.subway = null; continue; }
         const address = [sido, regionName, it.dong, it.jibun].filter(Boolean).join(' ');
         const coord = await fetchVworldCoord(env, address);
         it.subway = coord ? nearestSubway(coord.lat, coord.lng) : null;
-      }));
+      }
     }
 
     const text = JSON.stringify({ items: items, months: months });
