@@ -680,7 +680,7 @@ function nearestSubway(lat, lng) {
 // 이름이 겹치는 동명 지역과 헷갈리지 않음.
 const SIDO_BY_CODE_PREFIX = { '11': '서울특별시', '26': '부산광역시', '27': '대구광역시', '28': '인천광역시', '29': '광주광역시', '30': '대전광역시', '31': '울산광역시', '36': '세종특별자치시', '41': '경기도' };
 
-const VWORLD_API_URL = 'http://api.vworld.kr/req/address';
+const VWORLD_API_URL = 'https://api.vworld.kr/req/address';
 
 // 지오코딩 결과는 주소가 안 바뀌는 한 계속 같은 값이라, 검색 예산이 바뀌어도
 // 재사용할 수 있게 주소별로 30일 캐시(re-search 캐시와는 별도, 훨씬 긴 TTL).
