@@ -316,12 +316,52 @@ const RE_INDICATOR_SERIES = [
   { id: 'DEXKOUS', key: 'usdkrw', label: '원/달러 환율' },
   { id: 'DFF', key: 'fedRate', label: '미국 기준금리' },
   { id: 'DGS10', key: 'us10y', label: '미국 10년물 국채금리' },
-  { id: 'M2SL', key: 'm2', label: '미국 M2 통화량(십억달러)' },
-  // BIS-sourced via FRED — BIS's own terms require citation when this
-  // data is reused/displayed, not just "no API key needed": see the
-  // citation string returned alongside this series below.
-  { id: 'QKRN628BIS', key: 'krHousing', label: '한국 주택가격지수(BIS)' }
+  { id: 'M2SL', key: 'm2', label: '미국 M2 통화량(십억달러)' }
+  // 한국 주택가격지수는 예전엔 BIS(FRED 경유, 분기·8개월 지연)를 썼는데
+  // 너무 느리다는 피드백을 받고 아래 fetchRoneApartmentIndex()의 한국부동산원
+  // R-ONE Open API(월별, 1~2개월 지연)로 교체했음 — series/labels에 별도로 병합.
 ];
+
+// 한국 아파트 매매가격지수 — 한국부동산원 R-ONE Open API. data.go.kr(공공데이터
+// 포털)엔 이 통계의 자체 발급 버튼이 없고("제공처 바로가기"만 있음), 실제
+// 인증키는 reb.or.kr/r-one에 별도 가입해서 발급받아야 함(ECOS/KOSIS와 같은
+// "직접 가입 필요" 패턴). STATBL_ID=A_2024_00045 = "(월) 매매가격지수_아파트",
+// CLS_ID=500001 = 전국, ITM_ID=100001 = 지수 — 전부 R-ONE의 통계표 목록
+// API(SttsApiTbl.do)로 직접 조회해서 확인한 값. 이 API도 CORS를 지원하지
+// 않아 서버에서 대신 호출.
+const RONE_API_URL = 'https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do';
+
+async function fetchRoneApartmentIndex(env) {
+  if (!env.RONE_API_KEY) return null; // 키 없으면 이 열만 조용히 비움 — 나머지 지표는 정상 표시
+  try {
+    const endYear = new Date().getFullYear() + 1;
+    const params = new URLSearchParams({
+      KEY: env.RONE_API_KEY,
+      STATBL_ID: 'A_2024_00045',
+      DTACYCLE_CD: 'MM',
+      CLS_ID: '500001',
+      ITM_ID: '100001',
+      START_WRTTIME: '200301',
+      END_WRTTIME: endYear + '12',
+      Type: 'json',
+      pSize: '1000' // 기본 페이지 크기로는 전체 이력이 안 잘려서 잘림 — 실측으로 273행 전체가 한 번에 오는 걸 확인함
+    });
+    const r = await fetch(RONE_API_URL + '?' + params.toString());
+    const data = await r.json();
+    const rows = data.SttsApiTblData && data.SttsApiTblData[1] && data.SttsApiTblData[1].row;
+    if (!rows) return null;
+    const byYear = {};
+    rows.forEach(function (row) {
+      const wt = String(row.WRTTIME_IDTFR_ID || '');
+      const year = wt.slice(0, 4);
+      const value = parseFloat(row.DTA_VAL);
+      if (year.length === 4 && !isNaN(value)) byYear[year] = value; // 같은 해 안에서는 더 늦은 달이 이전 값을 덮어씀 -> 그 해의 마지막 관측치
+    });
+    return byYear;
+  } catch (e) {
+    return null;
+  }
+}
 
 function yearlyFromCsv(csvText) {
   const lines = csvText.trim().split('\n').slice(1); // drop header row
@@ -339,9 +379,11 @@ function yearlyFromCsv(csvText) {
   return byYear;
 }
 
+const RE_INDICATORS_CACHE_KEY = 're-indicators:v1';
+const RE_MANUAL_KR_M2_KEY = 're-manual:krM2';
+
 async function handleRealEstateIndicators(env) {
-  const cacheKey = 're-indicators:v1';
-  const cached = await env.DATA.get(cacheKey);
+  const cached = await env.DATA.get(RE_INDICATORS_CACHE_KEY);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
   const results = await Promise.allSettled(RE_INDICATOR_SERIES.map(function (s) {
@@ -360,6 +402,23 @@ async function handleRealEstateIndicators(env) {
   });
   if (!Object.keys(series).length) return json({ error: '지표 데이터를 가져오지 못했어요.' }, 502);
 
+  const roneHousing = await fetchRoneApartmentIndex(env);
+  if (roneHousing && Object.keys(roneHousing).length) {
+    series.krHousing = roneHousing;
+    labels.krHousing = '한국 아파트 매매가격지수(한국부동산원)';
+  }
+
+  // 한국 M2 — no free auto-updating source was found (한국은행 ECOS needs its
+  // own API key, and the one FRED had for this stopped updating in 2017),
+  // so the admin looks up the current figure on ECOS by hand and posts it
+  // via POST /api/real-estate-indicators-manual. Merged in here as its own
+  // series, clearly labeled as manually maintained (see label below).
+  const manualRaw = await env.DATA.get(RE_MANUAL_KR_M2_KEY);
+  if (manualRaw) {
+    series.krM2 = JSON.parse(manualRaw);
+    labels.krM2 = '한국 M2 통화량(수동입력, 조원)';
+  }
+
   const allYears = new Set();
   Object.values(series).forEach(function (byYear) { Object.keys(byYear).forEach(function (y) { allYears.add(y); }); });
   const years = Array.from(allYears).sort().reverse(); // most recent year first
@@ -368,10 +427,39 @@ async function handleRealEstateIndicators(env) {
     years: years,
     labels: labels,
     series: series,
-    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. QKRN628BIS: Bank for International Settlements, Residential Property Prices for Republic of Korea, retrieved from FRED — reused here with required source citation per BIS terms.'
+    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. 한국 아파트 매매가격지수: 한국부동산원 R-ONE Open API, 전국주택가격동향조사(월). 한국 M2: 한국은행 ECOS, 관리자가 직접 조회해서 입력한 수치.'
   });
-  await env.DATA.put(cacheKey, text, { expirationTtl: 60 * 60 * 24 }); // 24h — these are mostly monthly/quarterly series, no need to refetch more often
+  await env.DATA.put(RE_INDICATORS_CACHE_KEY, text, { expirationTtl: 60 * 60 * 24 }); // 24h — these are mostly monthly/quarterly series, no need to refetch more often
   return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+}
+
+// admin-only: set/update one year's Korea M2 figure by hand (see comment
+// above). Body: { admin, year, value }. Clears the combined-response cache
+// so the new number shows up on the next page load instead of waiting out
+// the 24h TTL.
+async function handleRealEstateManualSet(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return json({ error: '잘못된 요청이에요.' }, 400);
+  }
+  if (!isAdmin(env, (body.admin || '').toString())) {
+    return json({ error: '권한이 없어요.' }, 403);
+  }
+  const year = (body.year || '').toString().slice(0, 4);
+  const value = parseFloat(body.value);
+  if (!/^[0-9]{4}$/.test(year) || isNaN(value)) {
+    return json({ error: 'year(4자리)와 value(숫자)를 정확히 보내주세요.' }, 400);
+  }
+
+  const raw = await env.DATA.get(RE_MANUAL_KR_M2_KEY);
+  const byYear = raw ? JSON.parse(raw) : {};
+  byYear[year] = value;
+  await env.DATA.put(RE_MANUAL_KR_M2_KEY, JSON.stringify(byYear));
+  await env.DATA.delete(RE_INDICATORS_CACHE_KEY); // force a fresh merge on next GET
+
+  return json({ ok: true, year: year, value: value });
 }
 
 // Crypto news — pulls RSS server-side from several outlets (all require no
@@ -655,6 +743,11 @@ export default {
 
     if (url.pathname === '/api/real-estate-indicators') {
       if (request.method === 'GET') return handleRealEstateIndicators(env);
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    if (url.pathname === '/api/real-estate-indicators-manual') {
+      if (request.method === 'POST') return handleRealEstateManualSet(request, env);
       return new Response('Method not allowed', { status: 405 });
     }
 

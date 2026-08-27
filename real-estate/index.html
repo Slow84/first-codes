@@ -170,8 +170,8 @@
     <h2 style="font-size: 17px; margin: 40px 0 16px;">연도별 지표 한눈에 보기 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(각 연도의 마지막 관측치 기준)</span></h2>
     <div class="table-wrap">
       <table class="data-table" id="reIndicatorTable">
-        <thead><tr><th>연도</th><th>원/달러 환율</th><th>미국 기준금리</th><th>미국 10년물 국채금리</th><th>미국 M2(십억달러)</th><th>한국 주택가격지수</th></tr></thead>
-        <tbody id="reIndicatorBody"><tr><td colspan="6" class="loading-note">불러오는 중...</td></tr></tbody>
+        <thead><tr><th>연도</th><th>원/달러 환율</th><th>미국 기준금리</th><th>미국 10년물 국채금리</th><th>미국 M2(십억달러)</th><th>한국 아파트 매매가격지수</th><th>한국 M2(조원)</th></tr></thead>
+        <tbody id="reIndicatorBody"><tr><td colspan="7" class="loading-note">불러오는 중...</td></tr></tbody>
       </table>
     </div>
     <div id="reIndicatorMore" style="margin-top: 10px;"></div>
@@ -232,6 +232,7 @@
       var us10y = data.series.us10y ? data.series.us10y[y] : null;
       var m2 = data.series.m2 ? data.series.m2[y] : null;
       var krHousing = data.series.krHousing ? data.series.krHousing[y] : null;
+      var krM2 = data.series.krM2 ? data.series.krM2[y] : null;
       return '<tr>' +
         '<td><strong>' + y + '</strong></td>' +
         '<td>' + fmtNum(usdkrw, 1) + yoyBadge(data.series.usdkrw, data.years, i) + '</td>' +
@@ -239,6 +240,7 @@
         '<td>' + fmtNum(us10y, 2) + '%</td>' +
         '<td>' + fmtNum(m2, 0) + yoyBadge(data.series.m2, data.years, i) + '</td>' +
         '<td>' + fmtNum(krHousing, 2) + yoyBadge(data.series.krHousing, data.years, i) + '</td>' +
+        '<td>' + fmtNum(krM2, 0) + yoyBadge(data.series.krM2, data.years, i) + '</td>' +
         '</tr>';
     }).join('');
 
@@ -262,7 +264,7 @@
       document.getElementById('reIndicatorCitation').textContent = data.citation || '';
     })
     .catch(function () {
-      document.getElementById('reIndicatorBody').innerHTML = '<tr><td colspan="6" class="loading-note">불러오지 못했어요.</td></tr>';
+      document.getElementById('reIndicatorBody').innerHTML = '<tr><td colspan="7" class="loading-note">불러오지 못했어요.</td></tr>';
     });
 })();
 </script>
