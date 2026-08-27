@@ -167,6 +167,16 @@
       </a>
     </div>
 
+    <h2 style="font-size: 17px; margin: 40px 0 16px;">연도별 지표 한눈에 보기 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(각 연도의 마지막 관측치 기준)</span></h2>
+    <div class="table-wrap">
+      <table class="data-table" id="reIndicatorTable">
+        <thead><tr><th>연도</th><th>원/달러 환율</th><th>미국 기준금리</th><th>미국 10년물 국채금리</th><th>미국 M2(십억달러)</th><th>한국 주택가격지수</th></tr></thead>
+        <tbody id="reIndicatorBody"><tr><td colspan="6" class="loading-note">불러오는 중...</td></tr></tbody>
+      </table>
+    </div>
+    <div id="reIndicatorMore" style="margin-top: 10px;"></div>
+    <p style="font-size: 11.5px; color: var(--text-muted); margin-top: 10px; max-width: 640px;" id="reIndicatorCitation"></p>
+
     <h2 style="font-size: 17px; margin: 40px 0 16px;">갈아타기 판단에 같이 볼 만한 지표</h2>
     <ul style="font-size: 14.5px; padding-left: 20px; margin: 0; max-width: 640px;">
       <li style="margin-bottom: 10px;"><strong>전세가율</strong> — 매매가 대비 전세가 비율. 높으면 실수요가 튼튼하다는 신호로 보고, 낮으면 갭투자·버블 신호로 보는 경우가 많아요.</li>
@@ -185,5 +195,60 @@
 
 <script src="/assets/tv-widget.js" defer></script>
 <script src="/assets/nav.js" defer></script>
+<script>
+(function () {
+  var DEFAULT_YEARS = 20;
+  var showAll = false;
+
+  function fmtNum(v, decimals) {
+    if (v == null) return '—';
+    return v.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  }
+
+  function render(data) {
+    var body = document.getElementById('reIndicatorBody');
+    var moreWrap = document.getElementById('reIndicatorMore');
+    var years = showAll ? data.years : data.years.slice(0, DEFAULT_YEARS);
+
+    body.innerHTML = years.map(function (y) {
+      var usdkrw = data.series.usdkrw ? data.series.usdkrw[y] : null;
+      var fedRate = data.series.fedRate ? data.series.fedRate[y] : null;
+      var us10y = data.series.us10y ? data.series.us10y[y] : null;
+      var m2 = data.series.m2 ? data.series.m2[y] : null;
+      var krHousing = data.series.krHousing ? data.series.krHousing[y] : null;
+      return '<tr>' +
+        '<td><strong>' + y + '</strong></td>' +
+        '<td>' + fmtNum(usdkrw, 1) + '</td>' +
+        '<td>' + fmtNum(fedRate, 2) + '%</td>' +
+        '<td>' + fmtNum(us10y, 2) + '%</td>' +
+        '<td>' + fmtNum(m2, 0) + '</td>' +
+        '<td>' + fmtNum(krHousing, 2) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    if (data.years.length > DEFAULT_YEARS) {
+      moreWrap.innerHTML = '<button type="button" class="pill-btn" id="reIndicatorToggle">' +
+        (showAll ? '최근 ' + DEFAULT_YEARS + '년만 보기' : '전체 ' + data.years.length + '년 보기 (1954년~)') + '</button>';
+      document.getElementById('reIndicatorToggle').addEventListener('click', function () {
+        showAll = !showAll;
+        render(data);
+      });
+    } else {
+      moreWrap.innerHTML = '';
+    }
+  }
+
+  fetch('/api/real-estate-indicators')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.error) throw new Error(data.error);
+      render(data);
+      document.getElementById('reIndicatorCitation').textContent = data.citation || '';
+    })
+    .catch(function () {
+      document.getElementById('reIndicatorBody').innerHTML = '<tr><td colspan="6" class="loading-note">불러오지 못했어요.</td></tr>';
+    });
+})();
+</script>
 </body>
 </html>
