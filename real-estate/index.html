@@ -170,8 +170,8 @@
     <h2 style="font-size: 17px; margin: 40px 0 16px;">연도별 지표 한눈에 보기 <span style="font-weight:500; color:var(--text-muted); font-size:12.5px;">(신규 분양세대수만 연간 합계, 나머지는 각 연도의 마지막 관측치 기준)</span></h2>
     <div class="table-wrap">
       <table class="data-table" id="reIndicatorTable">
-        <thead><tr><th>연도</th><th>원/달러 환율</th><th>미국 기준금리</th><th>미국 10년물 국채금리</th><th>미국 M2(십억달러)</th><th>한국 아파트 매매가격지수</th><th>한국 M2(조원)</th><th>주택 매매심리지수</th><th>주택담보대출 금리</th><th>가계신용(조원)</th><th>신규 분양세대수(연간)</th><th>미분양(연말, 호)</th></tr></thead>
-        <tbody id="reIndicatorBody"><tr><td colspan="12" class="loading-note">불러오는 중...</td></tr></tbody>
+        <thead><tr><th>연도</th><th>원/달러 환율</th><th>미국 기준금리</th><th>미국 10년물 국채금리</th><th>미국 M2(십억달러)</th><th>한국 M2(조원)</th><th>한국 아파트 매매가격지수</th><th>주택 매매심리지수</th><th>주택담보대출 금리</th><th>가계신용(조원)</th><th>신규 분양세대수(연간)</th></tr></thead>
+        <tbody id="reIndicatorBody"><tr><td colspan="11" class="loading-note">불러오는 중...</td></tr></tbody>
       </table>
     </div>
     <div id="reIndicatorMore" style="margin-top: 10px;"></div>
@@ -204,6 +204,10 @@
   // years[] is sorted most-recent-first, so "1 year earlier" than years[i]
   // is years[i+1] — not always a clean calendar year-over-year gap if a
   // series has a missing year, but close enough for a quick glance.
+  // 숫자 뒤에 배지를 바로 붙이면(inline) 배지가 있는 행/없는 행마다 숫자
+  // 끝나는 위치가 들쭉날쭉해 보여서, 배지를 숫자 아래 줄에 따로 두는
+  // div로 바꿈 — 이러면 배지 유무와 상관없이 숫자 자체는 항상 같은
+  // 자리(셀 안쪽 끝)에 맞춰짐.
   function yoyBadge(byYear, years, i) {
     if (!byYear) return '';
     var cur = byYear[years[i]];
@@ -213,7 +217,11 @@
     var pct = (cur - prev) / Math.abs(prev) * 100;
     var cls = pct >= 0 ? 'up' : 'down';
     var sign = pct >= 0 ? '+' : '';
-    return ' <span class="rank-change ' + cls + '" style="font-size:11px;">' + sign + pct.toFixed(1) + '%</span>';
+    return '<div class="rank-change ' + cls + '" style="font-size:11px; margin-top:2px;">' + sign + pct.toFixed(1) + '%</div>';
+  }
+
+  function cell(value, decimals, byYear, years, i, suffix, note) {
+    return '<td><div style="font-variant-numeric: tabular-nums;">' + fmtNum(value, decimals) + (suffix || '') + (note || '') + '</div>' + yoyBadge(byYear, years, i) + '</td>';
   }
 
   function render(data) {
@@ -233,20 +241,22 @@
       var mortgageRate = data.series.mortgageRate ? data.series.mortgageRate[y] : null;
       var householdCredit = data.series.householdCredit ? data.series.householdCredit[y] : null;
       var newSupply = data.series.newSupply ? data.series.newSupply[y] : null;
-      var unsold = data.series.unsold ? data.series.unsold[y] : null;
+      var proj = data.newSupplyProjection;
+      var newSupplyNote = (proj && proj.year === y)
+        ? ' <span style="color:var(--text-muted); font-weight:500;">(' + proj.monthsUsed + '월까지, 연말 예상 ' + fmtNum(proj.estimate, 0) + ')</span>'
+        : '';
       return '<tr>' +
         '<td><strong>' + y + '</strong></td>' +
-        '<td>' + fmtNum(usdkrw, 1) + yoyBadge(data.series.usdkrw, data.years, i) + '</td>' +
-        '<td>' + fmtNum(fedRate, 2) + '%</td>' +
-        '<td>' + fmtNum(us10y, 2) + '%</td>' +
-        '<td>' + fmtNum(m2, 0) + yoyBadge(data.series.m2, data.years, i) + '</td>' +
-        '<td>' + fmtNum(krHousing, 2) + yoyBadge(data.series.krHousing, data.years, i) + '</td>' +
-        '<td>' + fmtNum(krM2, 0) + yoyBadge(data.series.krM2, data.years, i) + '</td>' +
-        '<td>' + fmtNum(sentiment, 1) + yoyBadge(data.series.sentiment, data.years, i) + '</td>' +
-        '<td>' + fmtNum(mortgageRate, 2) + '%</td>' +
-        '<td>' + fmtNum(householdCredit, 0) + yoyBadge(data.series.householdCredit, data.years, i) + '</td>' +
-        '<td>' + fmtNum(newSupply, 0) + yoyBadge(data.series.newSupply, data.years, i) + '</td>' +
-        '<td>' + fmtNum(unsold, 0) + yoyBadge(data.series.unsold, data.years, i) + '</td>' +
+        cell(usdkrw, 1, data.series.usdkrw, data.years, i) +
+        cell(fedRate, 2, null, data.years, i, '%') +
+        cell(us10y, 2, null, data.years, i, '%') +
+        cell(m2, 0, data.series.m2, data.years, i) +
+        cell(krM2, 0, data.series.krM2, data.years, i) +
+        cell(krHousing, 2, data.series.krHousing, data.years, i) +
+        cell(sentiment, 1, data.series.sentiment, data.years, i) +
+        cell(mortgageRate, 2, null, data.years, i, '%') +
+        cell(householdCredit, 0, data.series.householdCredit, data.years, i) +
+        cell(newSupply, 0, data.series.newSupply, data.years, i, newSupplyNote) +
         '</tr>';
     }).join('');
 
@@ -270,7 +280,7 @@
       document.getElementById('reIndicatorCitation').textContent = data.citation || '';
     })
     .catch(function () {
-      document.getElementById('reIndicatorBody').innerHTML = '<tr><td colspan="12" class="loading-note">불러오지 못했어요.</td></tr>';
+      document.getElementById('reIndicatorBody').innerHTML = '<tr><td colspan="11" class="loading-note">불러오지 못했어요.</td></tr>';
     });
 })();
 </script>

@@ -360,40 +360,20 @@ async function fetchRoneSeries(env, statblId, clsId, itmId, aggregate) {
     const rows = data.SttsApiTblData && data.SttsApiTblData[1] && data.SttsApiTblData[1].row;
     if (!rows) return null;
     const byYear = {};
+    const monthCount = {}; // 'sum' 모드에서만 채워짐 — 올해처럼 아직 12개월이 다 안 쌓인 해를 구분하기 위한 값
     rows.forEach(function (row) {
       const wt = String(row.WRTTIME_IDTFR_ID || '');
       const year = wt.slice(0, 4);
       const value = parseFloat(row.DTA_VAL);
       if (year.length !== 4 || isNaN(value)) return;
-      if (aggregate === 'sum') byYear[year] = (byYear[year] || 0) + value;
-      else byYear[year] = value; // 같은 해 안에서는 더 늦은 달이 이전 값을 덮어씀 -> 그 해의 마지막 관측치
+      if (aggregate === 'sum') {
+        byYear[year] = (byYear[year] || 0) + value;
+        monthCount[year] = (monthCount[year] || 0) + 1;
+      } else {
+        byYear[year] = value; // 같은 해 안에서는 더 늦은 달이 이전 값을 덮어씀 -> 그 해의 마지막 관측치
+      }
     });
-    return byYear;
-  } catch (e) {
-    return null;
-  }
-}
-
-// 미분양주택현황처럼 통계표 자체에 "전국" 합계 행이 없고 시도별 행만 있는
-// 경우, 시도 17곳(특별시·광역시·도)을 각각 fetchRoneSeries로 조회해서 연도별로
-// 더함 — CLS_ID는 SttsApiTblData 응답에서 CLS_FULLNM이 "OO>계"인 행들을 직접
-// 뒤져서 확인한 값.
-const RE_SIDO_CLS_IDS = ['50018', '50044', '50061', '50071', '50082', '50088', '50094', '50100', '50120', '50121', '50133', '50149', '50177', '50200', '50228', '50229', '50233'];
-
-async function fetchRoneNationwideSum(env, statblId, itmId) {
-  if (!env.RONE_API_KEY) return null;
-  try {
-    const perRegion = await Promise.all(RE_SIDO_CLS_IDS.map(function (clsId) {
-      return fetchRoneSeries(env, statblId, clsId, itmId);
-    }));
-    const byYear = {};
-    perRegion.forEach(function (regionByYear) {
-      if (!regionByYear) return;
-      Object.keys(regionByYear).forEach(function (year) {
-        byYear[year] = (byYear[year] || 0) + regionByYear[year];
-      });
-    });
-    return Object.keys(byYear).length ? byYear : null;
+    return aggregate === 'sum' ? { byYear: byYear, monthCount: monthCount } : byYear;
   } catch (e) {
     return null;
   }
@@ -549,19 +529,20 @@ async function handleRealEstateIndicators(env) {
   // 있어서 지역 합산이 필요 없음. 'sum'으로 넘기는 이유는 "분양물량"은
   // 12월 한 달치 스냅샷이 아니라 그 해에 새로 분양된 세대를 다 더한
   // 연간 누계라서 — last를 쓰면 12월 한 달치만 보여주는 잘못된 숫자가 됨.
-  const newSupply = await fetchRoneSeries(env, 'T244633134461863', '50001', '10001', 'sum');
-  if (newSupply && Object.keys(newSupply).length) {
-    series.newSupply = newSupply;
+  // 올해(진행 중인 해)는 아직 12개월치가 다 안 쌓였으므로, 지금까지의
+  // 월평균 × 12로 "연말까지 예상되는 물량"을 따로 계산해서 newSupplyProjection
+  // 으로 같이 내려줌 — series.newSupply 자체는 그대로 "지금까지의 실측 합계".
+  const newSupplyResult = await fetchRoneSeries(env, 'T244633134461863', '50001', '10001', 'sum');
+  let newSupplyProjection = null;
+  if (newSupplyResult && Object.keys(newSupplyResult.byYear).length) {
+    series.newSupply = newSupplyResult.byYear;
     labels.newSupply = '신규 분양세대수(한국부동산원, 연간 합계)';
-  }
-
-  // 미분양주택현황 — 이 통계표는 전국 합계 행이 없어서 17개 시도를 각각
-  // 조회해서 더함(fetchRoneNationwideSum). 미분양은 "그 시점의 재고"라서
-  // 기본값인 'last'(그 해 마지막 달) 그대로 씀.
-  const unsold = await fetchRoneNationwideSum(env, 'T237973129847263', '10001');
-  if (unsold && Object.keys(unsold).length) {
-    series.unsold = unsold;
-    labels.unsold = '미분양주택현황(한국부동산원, 연말 기준)';
+    const curYear = String(new Date().getFullYear());
+    const monthsSoFar = newSupplyResult.monthCount[curYear];
+    const sumSoFar = newSupplyResult.byYear[curYear];
+    if (monthsSoFar && monthsSoFar < 12 && sumSoFar != null) {
+      newSupplyProjection = { year: curYear, monthsUsed: monthsSoFar, estimate: Math.round(sumSoFar / monthsSoFar * 12) };
+    }
   }
 
   // 한국 M2 — 처음엔 무료 자동갱신 소스를 못 찾아서(ECOS는 자체 키 필요,
@@ -589,7 +570,8 @@ async function handleRealEstateIndicators(env) {
     years: years,
     labels: labels,
     series: series,
-    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. 한국 아파트 매매가격지수·주택 매매심리지수·신규 분양세대수·미분양주택현황: 한국부동산원 R-ONE Open API(매매심리지수 원자료는 국토연구원 「부동산시장 소비자심리조사」; 신규 분양세대수·미분양주택현황은 시도별 수치를 합산한 값). 한국 M2·주택담보대출 금리·가계신용: 한국은행 ECOS Open API — M2는 자동조회 실패 시에만 관리자가 직접 입력한 수치로 대체됨.'
+    newSupplyProjection: newSupplyProjection,
+    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. 한국 아파트 매매가격지수·주택 매매심리지수·신규 분양세대수: 한국부동산원 R-ONE Open API(매매심리지수 원자료는 국토연구원 「부동산시장 소비자심리조사」). 한국 M2·주택담보대출 금리·가계신용: 한국은행 ECOS Open API — M2는 자동조회 실패 시에만 관리자가 직접 입력한 수치로 대체됨.'
   });
   await env.DATA.put(RE_INDICATORS_CACHE_KEY, text, { expirationTtl: 60 * 60 * 24 }); // 24h — these are mostly monthly/quarterly series, no need to refetch more often
   return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
