@@ -606,6 +606,86 @@ async function handleRealEstateManualSet(request, env) {
   return json({ ok: true, year: year, value: value });
 }
 
+// "어디로 갈아타면 좋을까" — 국토교통부 아파트 매매 실거래가 API(RTMSDataSvcAptTrade).
+// data.go.kr에 자체 활용신청(활용신청 버튼)이 있는 진짜 오픈API라 R-ONE/ECOS처럼
+// 별도 사이트 가입은 필요 없었음. 응답이 JSON이 아니라 XML이라, 이미 크립토
+// 뉴스 RSS 파싱에 쓰던 xmlTag()를 그대로 재사용. CORS 미지원이라 서버에서 대신 호출.
+const MOLIT_API_URL = 'http://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade';
+
+function parseAptTradeXml(xml) {
+  const items = [];
+  const itemRe = /<item>[\s\S]*?<\/item>/g;
+  let m;
+  while ((m = itemRe.exec(xml))) {
+    const block = m[0];
+    const name = xmlTag(block, 'aptNm').trim();
+    const dealAmountRaw = xmlTag(block, 'dealAmount').trim().replace(/,/g, '');
+    const dealAmount = parseInt(dealAmountRaw, 10); // 만원 단위
+    const year = xmlTag(block, 'dealYear').trim();
+    const month = xmlTag(block, 'dealMonth').trim();
+    const day = xmlTag(block, 'dealDay').trim();
+    const dong = xmlTag(block, 'umdNm').trim();
+    const area = parseFloat(xmlTag(block, 'excluUseAr').trim());
+    const floor = xmlTag(block, 'floor').trim();
+    const buildYear = xmlTag(block, 'buildYear').trim();
+    if (!name || isNaN(dealAmount)) continue;
+    items.push({ name: name, dong: dong, dealAmount: dealAmount, area: area, floor: floor, buildYear: buildYear, dealDate: year + '.' + month + '.' + day });
+  }
+  return items;
+}
+
+// 한 달만 조회하면 그 지역에 그 달 거래가 아예 없을 수 있어서(실제로 확인한
+// 사례: 부천시 2025년 7월) 최근 3개월치를 합쳐서 조회함.
+function recentYearMonths(count) {
+  const out = [];
+  const d = new Date();
+  for (let i = 0; i < count; i++) {
+    const y = d.getFullYear();
+    const mo = d.getMonth() + 1;
+    out.push(y + String(mo).padStart(2, '0'));
+    d.setMonth(d.getMonth() - 1);
+  }
+  return out;
+}
+
+async function handleRealEstateSearch(url, env) {
+  if (!env.MOLIT_API_KEY) return json({ error: '실거래가 조회 기능이 아직 설정되지 않았어요.' }, 502);
+  const lawdCd = (url.searchParams.get('lawdCd') || '').trim();
+  const budget = parseFloat(url.searchParams.get('budget')); // 억원 단위
+  if (!/^[0-9]{5}$/.test(lawdCd) || isNaN(budget) || budget <= 0) {
+    return json({ error: 'lawdCd(5자리)와 budget(억원, 양수)을 정확히 보내주세요.' }, 400);
+  }
+  const budgetManwon = budget * 10000;
+  const cacheKey = 're-search:' + lawdCd + ':' + budget;
+  const cached = await env.DATA.get(cacheKey);
+  if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+
+  try {
+    // data.go.kr 서비스키는 "인코딩"판(이미 %2F, %3D 등이 들어있음)과 "디코딩"판
+    // 둘 다 발급되는데, 어느 쪽을 시크릿에 저장했는지 여기서는 알 수 없음.
+    // 이미 인코딩된 값을 URLSearchParams에 그대로 넣으면 한 번 더 인코딩돼서
+    // (%2F -> %252F) 키가 깨지므로, %가 섞여있으면 먼저 디코딩해서 원본으로
+    // 되돌린 뒤 URLSearchParams가 인코딩을 한 번만 하게 함.
+    const molitKey = env.MOLIT_API_KEY.indexOf('%') !== -1 ? decodeURIComponent(env.MOLIT_API_KEY) : env.MOLIT_API_KEY;
+    const months = recentYearMonths(3);
+    const results = await Promise.allSettled(months.map(function (ym) {
+      const params = new URLSearchParams({ serviceKey: molitKey, LAWD_CD: lawdCd, DEAL_YMD: ym, numOfRows: '1000' });
+      return fetch(MOLIT_API_URL + '?' + params.toString()).then(function (r) { return r.text(); }).then(parseAptTradeXml);
+    }));
+    let items = [];
+    results.forEach(function (res) { if (res.status === 'fulfilled') items = items.concat(res.value); });
+    items = items.filter(function (it) { return it.dealAmount <= budgetManwon; });
+    items.sort(function (a, b) { return b.dealAmount - a.dealAmount; }); // 예산 안에서 가장 비싼(=좋은) 순
+    items = items.slice(0, 50);
+
+    const text = JSON.stringify({ items: items, months: months });
+    await env.DATA.put(cacheKey, text, { expirationTtl: 60 * 60 * 6 }); // 6h — 실거래가 신고는 실시간이 아니라 하루 몇 번만 갱신돼도 충분
+    return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+  } catch (e) {
+    return json({ error: '실거래가 데이터를 가져오지 못했어요.' }, 502);
+  }
+}
+
 // Crypto news — pulls RSS server-side from several outlets (all require no
 // API key, but a browser fetch would hit CORS, so it's proxied here). RSS
 // is simple enough that a small regex parser is easier than shipping an
@@ -892,6 +972,11 @@ export default {
 
     if (url.pathname === '/api/real-estate-indicators-manual') {
       if (request.method === 'POST') return handleRealEstateManualSet(request, env);
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    if (url.pathname === '/api/real-estate-search') {
+      if (request.method === 'GET') return handleRealEstateSearch(url, env);
       return new Response('Method not allowed', { status: 405 });
     }
 
