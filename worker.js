@@ -754,10 +754,13 @@ async function handleRealEstateSearch(url, env) {
     // 조회로 3번(최근 3개월치) 썼으니, 좌표변환은 상위 25건까지만 돌려서
     // 합계가 한도 안에 들어오게 함. 나머지 항목은 subway가 null로 남음
     // (역세권 아님이 아니라 "아직 안 알아봄"이라는 뜻).
+    // 2026-08-27: VWorld가 이 Worker에서 호출하면 100% 실패(502/520)하는 걸
+    // 확인했는데(IP 제한 의심, 원인 조사 중), 실패해도 매 호출마다 왕복
+    // 시간이 들어서 25번 순차 호출하면 검색 자체가 느려짐 — 원인 해결 전까지는
+    // 아예 시도하지 않도록 꺼둠(GEOCODE_ENABLED). 해결되면 이 값만 true로.
+    const GEOCODE_ENABLED = false;
     const GEOCODE_LIMIT = 25;
-    if (env.VWORLD_API_KEY && sido) {
-      // 25개를 Promise.all로 한꺼번에 쏘니 VWorld가 502/520으로 거부함(버스트로
-      // 몰리는 걸 못 받아주는 듯) — 하나씩 순서대로 요청하는 걸로 바꿔서 해결.
+    if (GEOCODE_ENABLED && env.VWORLD_API_KEY && sido) {
       for (const it of items.slice(0, GEOCODE_LIMIT)) {
         if (!it.jibun) { it.subway = null; continue; }
         const address = [sido, regionName, it.dong, it.jibun].filter(Boolean).join(' ');

@@ -122,7 +122,7 @@
 
     <div class="callout" style="margin-top: 20px;">
       <strong>ℹ 참고</strong>
-역세권은 지금 서울 지하철 1~8호선만 지원해요(경기·타 도시 노선은 준비 중). 대출한도(LTV·DSR) 계산, 초품아·상권 같은 나머지 입지 조건도 아직 준비 중이에요. 매물 정보는 별도 API 없이, 결과 각 줄의 "네이버부동산에서 보기" 링크로 확인해요.
+역세권 등 입지 조건은 지금 잠시 꺼져 있어요(외부 API 연동 문제 확인 중). 대출한도(LTV·DSR) 계산, 초품아·상권도 아직 준비 중이에요. 위치는 별도 API 없이, 결과 각 줄의 "네이버지도에서 보기" 링크로 확인해요.
     </div>
 
     <div class="chart-card" style="margin-top: 28px; max-width: 560px; padding: 24px;">
@@ -145,7 +145,7 @@
 
     <div class="table-wrap" style="margin-top:12px;">
       <table class="data-table" id="resultTable" style="display:none;">
-        <thead><tr><th>아파트</th><th>동</th><th>전용면적(㎡)</th><th>층</th><th>준공연도</th><th>거래가</th><th>거래일</th><th>역세권</th><th>매물</th></tr></thead>
+        <thead><tr><th>아파트</th><th>동</th><th>전용면적(㎡)</th><th>층</th><th>준공연도</th><th>거래가</th><th>거래일</th><th>역세권</th><th>지도</th></tr></thead>
         <tbody id="resultBody"></tbody>
       </table>
     </div>
@@ -244,7 +244,7 @@
           // 동번호가 괄호로 붙어있는 경우가 있어서, 검색어에서는 그 괄호 부분을 빼야
           // 정상적으로 찾음(괄호 안 "동,동,동" 나열은 실제 주소/이름이 아님).
           var searchName = it.name.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
-          var mapUrl = 'https://new.land.naver.com/search?query=' + encodeURIComponent(searchName + ' ' + it.dong);
+          var mapUrl = 'https://map.naver.com/p/search/' + encodeURIComponent(searchName + ' ' + it.dong);
           var subwayText = '—';
           if (it.subway) {
             var cls = it.subway.tier === '비역세권' ? '' : ' class="cell-warn"';
@@ -259,7 +259,7 @@
             '<td>' + fmtEok(it.dealAmount) + '</td>' +
             '<td>' + it.dealDate + '</td>' +
             '<td>' + subwayText + '</td>' +
-            '<td><a href="' + mapUrl + '" target="_blank" rel="noopener" class="news-link">네이버부동산</a></td>' +
+            '<td><a href="' + mapUrl + '" target="_blank" rel="noopener" class="news-link">네이버지도</a></td>' +
             '</tr>';
         }).join('');
         table.style.display = '';
