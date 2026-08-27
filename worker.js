@@ -9,6 +9,11 @@ const MAX_NAME = 40;
 const MAX_TEXT = 1000;
 const RATE_LIMIT_SECONDS = 30;
 const MAX_COMMENTS_PER_PAGE = 500;
+// admin key has no length/complexity enforcement, so brute-forcing a short
+// key would otherwise be unthrottled — lock an IP out after too many wrong
+// guesses instead of checking the key itself.
+const MAX_ADMIN_ATTEMPTS = 5;
+const ADMIN_LOCKOUT_SECONDS = 15 * 60;
 // starter list — add words here if spam gets through; matched case-insensitively
 const BLOCKED_WORDS = ['viagra', 'casino'];
 
@@ -35,9 +40,38 @@ function isAdmin(env, key) {
   return !!env.ADMIN_KEY && key === env.ADMIN_KEY;
 }
 
-async function handleCommentsGet(env, url) {
+async function isAdminLocked(env, ip) {
+  const count = Number(await env.DATA.get('adminfail:' + ip)) || 0;
+  return count >= MAX_ADMIN_ATTEMPTS;
+}
+
+async function recordAdminFailure(env, ip) {
+  const key = 'adminfail:' + ip;
+  const count = (Number(await env.DATA.get(key)) || 0) + 1;
+  await env.DATA.put(key, String(count), { expirationTtl: ADMIN_LOCKOUT_SECONDS });
+}
+
+async function clearAdminFailures(env, ip) {
+  await env.DATA.delete('adminfail:' + ip);
+}
+
+async function handleCommentsGet(request, env, url) {
   const page = (url.searchParams.get('page') || 'home').slice(0, 60);
-  const admin = isAdmin(env, url.searchParams.get('admin') || '');
+  const adminKey = url.searchParams.get('admin') || '';
+  const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+  // a wrong ?admin= just falls back to the public view rather than erroring,
+  // so a locked-out or mistyped attempt doesn't break the page for a reader
+  let admin = false;
+  if (adminKey) {
+    if (await isAdminLocked(env, ip)) {
+      admin = false;
+    } else if (isAdmin(env, adminKey)) {
+      admin = true;
+      await clearAdminFailures(env, ip);
+    } else {
+      await recordAdminFailure(env, ip);
+    }
+  }
   const raw = await env.DATA.get('page:' + page);
   const list = raw ? JSON.parse(raw) : [];
   const withIds = list.map(function (c, idx) { return Object.assign({}, c, { id: commentId(c, idx) }); });
@@ -108,9 +142,15 @@ async function handleCommentsDelete(request, env) {
   } catch (e) {
     return json({ error: '잘못된 요청이에요.' }, 400);
   }
+  const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+  if (await isAdminLocked(env, ip)) {
+    return json({ error: '너무 많이 틀렸어요. 잠시 후 다시 시도해주세요.' }, 429);
+  }
   if (!isAdmin(env, (body.admin || '').toString())) {
+    await recordAdminFailure(env, ip);
     return json({ error: '권한이 없어요.' }, 403);
   }
+  await clearAdminFailures(env, ip);
   const page = (body.page || 'home').toString().slice(0, 60);
   const id = (body.id || '').toString();
   if (!id) return json({ error: '삭제할 댓글을 찾지 못했어요.' }, 400);
@@ -262,6 +302,75 @@ async function handleYoutube(env, url) {
 
   const text = JSON.stringify({ videos: videos });
   await env.DATA.put(cacheKey, text, { expirationTtl: 60 * 30 }); // 30 min — trending doesn't change that fast
+  return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+}
+
+// Real-estate dashboard yearly indicators — pulls raw CSV straight from
+// FRED (Federal Reserve Economic Data), which requires no API key/signup
+// for this endpoint (verified: fredgraph.csv works unauthenticated).
+// FRED itself has no CORS header, so a browser fetch would be blocked —
+// proxied here like the RSS feeds. Reduced to one value per year (the
+// last observation in that year) since the point is "what was this
+// indicator around year X," not a full daily series.
+const RE_INDICATOR_SERIES = [
+  { id: 'DEXKOUS', key: 'usdkrw', label: '원/달러 환율' },
+  { id: 'DFF', key: 'fedRate', label: '미국 기준금리' },
+  { id: 'DGS10', key: 'us10y', label: '미국 10년물 국채금리' },
+  { id: 'M2SL', key: 'm2', label: '미국 M2 통화량(십억달러)' },
+  // BIS-sourced via FRED — BIS's own terms require citation when this
+  // data is reused/displayed, not just "no API key needed": see the
+  // citation string returned alongside this series below.
+  { id: 'QKRN628BIS', key: 'krHousing', label: '한국 주택가격지수(BIS)' }
+];
+
+function yearlyFromCsv(csvText) {
+  const lines = csvText.trim().split('\n').slice(1); // drop header row
+  const byYear = {};
+  lines.forEach(function (line) {
+    const comma = line.indexOf(',');
+    if (comma === -1) return;
+    const date = line.slice(0, comma);
+    const raw = line.slice(comma + 1).trim();
+    const value = parseFloat(raw);
+    if (isNaN(value)) return; // FRED uses "." for missing observations
+    const year = date.slice(0, 4);
+    byYear[year] = value; // later rows overwrite earlier ones within the same year -> last observation wins
+  });
+  return byYear;
+}
+
+async function handleRealEstateIndicators(env) {
+  const cacheKey = 're-indicators:v1';
+  const cached = await env.DATA.get(cacheKey);
+  if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+
+  const results = await Promise.allSettled(RE_INDICATOR_SERIES.map(function (s) {
+    return fetch('https://fred.stlouisfed.org/graph/fredgraph.csv?id=' + s.id)
+      .then(function (r) { return r.text(); })
+      .then(function (csv) { return { key: s.key, label: s.label, byYear: yearlyFromCsv(csv) }; });
+  }));
+
+  const series = {};
+  const labels = {};
+  results.forEach(function (res, i) {
+    if (res.status === 'fulfilled') {
+      series[res.value.key] = res.value.byYear;
+      labels[res.value.key] = res.value.label;
+    }
+  });
+  if (!Object.keys(series).length) return json({ error: '지표 데이터를 가져오지 못했어요.' }, 502);
+
+  const allYears = new Set();
+  Object.values(series).forEach(function (byYear) { Object.keys(byYear).forEach(function (y) { allYears.add(y); }); });
+  const years = Array.from(allYears).sort().reverse(); // most recent year first
+
+  const text = JSON.stringify({
+    years: years,
+    labels: labels,
+    series: series,
+    citation: 'DEXKOUS/DFF/DGS10/M2SL: Federal Reserve Bank of St. Louis (FRED), public domain U.S. government data. QKRN628BIS: Bank for International Settlements, Residential Property Prices for Republic of Korea, retrieved from FRED — reused here with required source citation per BIS terms.'
+  });
+  await env.DATA.put(cacheKey, text, { expirationTtl: 60 * 60 * 24 }); // 24h — these are mostly monthly/quarterly series, no need to refetch more often
   return new Response(text, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 }
 
@@ -522,7 +631,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/comments') {
-      if (request.method === 'GET') return handleCommentsGet(env, url);
+      if (request.method === 'GET') return handleCommentsGet(request, env, url);
       if (request.method === 'POST') return handleCommentsPost(request, env);
       if (request.method === 'DELETE') return handleCommentsDelete(request, env);
       return new Response('Method not allowed', { status: 405 });
@@ -541,6 +650,11 @@ export default {
 
     if (url.pathname === '/api/news') {
       if (request.method === 'GET') return handleNews(env);
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    if (url.pathname === '/api/real-estate-indicators') {
+      if (request.method === 'GET') return handleRealEstateIndicators(env);
       return new Response('Method not allowed', { status: 405 });
     }
 
