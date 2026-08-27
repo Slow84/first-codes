@@ -741,8 +741,14 @@ async function handleRealEstateSearch(url, env) {
     const sido = SIDO_BY_CODE_PREFIX[lawdCd.slice(0, 2)] || '';
     const regionNameRaw = (url.searchParams.get('regionName') || '').trim();
     const regionName = regionNameRaw.replace(/\([^)]*\)/g, '').trim(); // "중구(서울)" -> "중구"
+    // Cloudflare Worker는 한 번의 요청 처리에서 fetch() 호출을 최대 50번까지만
+    // 허용함("Too many subrequests" 에러로 확인됨) — 위에서 이미 실거래가
+    // 조회로 3번(최근 3개월치) 썼으니, 좌표변환은 상위 25건까지만 돌려서
+    // 합계가 한도 안에 들어오게 함. 나머지 항목은 subway가 null로 남음
+    // (역세권 아님이 아니라 "아직 안 알아봄"이라는 뜻).
+    const GEOCODE_LIMIT = 25;
     if (env.VWORLD_API_KEY && sido) {
-      await Promise.all(items.map(async function (it) {
+      await Promise.all(items.slice(0, GEOCODE_LIMIT).map(async function (it) {
         if (!it.jibun) { it.subway = null; return; }
         const address = [sido, regionName, it.dong, it.jibun].filter(Boolean).join(' ');
         const coord = await fetchVworldCoord(env, address);
