@@ -848,7 +848,8 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
   // 캐시(re-kakao-dist3)엔 폐업 매장이 그대로 저장돼있을 수 있음 -> 키 변경.
   // v5: 지하철역 실거리(subway) 필드 추가로 캐시 키 변경.
   // v6: school(단일)이 schools(배열, 초/중/고 각각)로 바뀌어서 캐시 키 변경.
-  const cacheKey = 're-kakao-dist6:' + kaptCode;
+  // v7: 개교 예정 학교(planned 필드) 추가로 캐시 키 변경.
+  const cacheKey = 're-kakao-dist7:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached !== null) return cached === 'null' ? null : JSON.parse(cached);
   if (!addr || !env.KAKAO_API_KEY) return null;
@@ -923,10 +924,29 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
     // 초/중/고 각각 가장 가까운 곳을 따로 찾음 — 하나만 고르면(예: 초등학교
     // 우선) 훨씬 가까운 중학교가 있어도 안 보이는 문제가 있어서, 있는 만큼
     // 전부 배열로 돌려주고 화면에서 줄바꿈으로 다 보여줌.
+    // 학교는 다른 카테고리와 달리 "(2028년 3월 예정)"처럼 개교 예정인 곳도
+    // isOpen()에서 걸러지긴 하지만, 완전히 버리지 않고 별도로 찾아서 "예정"
+    // 표시를 붙여 보여줌 — 아직 없는 학교라도 이사 계획을 세울 땐 유용한
+    // 정보라서.
     const schools = [];
     ['초등학교', '중학교', '고등학교'].forEach(function (level) {
       const found = pickFirstMatching(schoolRes, function (d) { return d.category_name && d.category_name.indexOf(level) !== -1; });
-      if (found) schools.push(found);
+      if (found) { schools.push(found); return; }
+      // 개교한 학교가 반경 안에 없으면, 개교 예정인 학교라도 있는지 찾아봄.
+      const docs = schoolRes && schoolRes.documents;
+      const planned = docs && docs.find(function (d) {
+        return d.category_name && d.category_name.indexOf(level) !== -1
+          && d.place_name && d.place_name.indexOf('(폐점)') === -1 && d.place_name.indexOf('예정)') !== -1;
+      });
+      if (planned) {
+        const m = planned.place_name.match(/\(([^)]*?)\s*예정\)/);
+        const date = m ? m[1].trim() : '';
+        schools.push({
+          name: planned.place_name.replace(/\s*\([^)]*예정\)/, '').trim(),
+          dist: parseInt(planned.distance, 10),
+          planned: date
+        });
+      }
     });
     const result = { hospital: hospital, gov: pickFirst(poRes), park: park, schools: schools, mart: pickFirst(martRes), subway: pickFirst(subwayRes) };
     await env.DATA.put(cacheKey, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 180 });
@@ -950,7 +970,8 @@ async function handleRealEstateSearch(url, env) {
   // v8: 주차대수 지상+지하 합산 버그 수정으로 캐시된 값이 틀렸을 수 있어 키 변경.
   // v9: nearby에 subway(지하철 실거리) 필드 추가로 캐시 키 변경.
   // v10: nearby.school -> nearby.schools(배열)로 모양이 바뀌어서 캐시 키 변경.
-  const cacheKey = 're-search10:' + lawdCd + ':' + budget;
+  // v11: nearby.schools에 planned(개교 예정) 필드 추가로 캐시 키 변경.
+  const cacheKey = 're-search11:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 

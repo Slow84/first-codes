@@ -393,7 +393,12 @@
       // 학교는 초/중/고 중 있는 만큼 배열로 옴(worker.js 참고) — 여러 개면
       // 한 칸 안에서 줄바꿈으로 하나씩 보여줌(가로로 늘어놓으면 표가 더 넓어짐).
       if (it.nearby.schools && it.nearby.schools.length) {
-        schoolText = it.nearby.schools.map(function (s) { return s.name + ' (' + s.dist + 'm)'; }).join('<br>');
+        schoolText = it.nearby.schools.map(function (s) {
+          // 개교 예정 학교는 "학교이름 2028년 3월_설립예정(1578m)"처럼 날짜와
+          // "설립예정"을 붙여서 지금 다니는 학교와 구분되게 표시함.
+          if (s.planned) return s.name + ' ' + s.planned + '_설립예정(' + s.dist + 'm)';
+          return s.name + ' (' + s.dist + 'm)';
+        }).join('<br>');
       }
       facilityText = withDist(it.nearby.mart, facilityText);
       subwayText = withDist(it.nearby.subway, subwayText);
