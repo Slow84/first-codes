@@ -834,7 +834,7 @@ const KAKAO_KEYWORD_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
 const KAKAO_PENDING_KEY = 're-kakao-pending';
 
 async function fetchKakaoDistance(env, kaptCode, addr) {
-  const cacheKey = 're-kakao-dist:' + kaptCode;
+  const cacheKey = 're-kakao-dist2:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached !== null) return cached === 'null' ? null : JSON.parse(cached);
   if (!addr || !env.KAKAO_API_KEY) return null;
@@ -854,7 +854,10 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
       return new URLSearchParams(Object.assign({ x: x, y: y, radius: '2000', sort: 'distance' }, extra)).toString();
     };
     const [hpRes, poRes, parkRes] = await Promise.all([
-      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'HP8', size: '1' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+      // size:5 — HP8(병원) 카테고리에 동물병원(수의과)도 같이 섞여 나오는 걸
+      // 실제로 확인해서(예: "동판교동물병원"이 사람 병원보다 더 가깝게 나옴),
+      // 1개만 받으면 걸러낼 여유가 없어 5개 받아서 아래에서 골라냄.
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'HP8', size: '5' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
       fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'PO3', size: '1' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
       // 공원은 카카오 카테고리 코드에 없어서 키워드 검색으로 대체 — "공원"으로
       // 검색하면 공원 안의 화장실/주차장까지 같이 섞여 나오는 걸 실제로 확인해서
@@ -867,12 +870,21 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
       const d = res && res.documents && res.documents[0];
       return d ? { name: d.place_name, dist: parseInt(d.distance, 10) } : null;
     }
+    function pickFirstMatching(res, filterFn) {
+      const docs = res && res.documents;
+      if (!docs) return null;
+      const d = docs.find(filterFn);
+      return d ? { name: d.place_name, dist: parseInt(d.distance, 10) } : null;
+    }
+    const hospital = pickFirstMatching(hpRes, function (d) {
+      return d.category_name && d.category_name.indexOf('의료,건강') === 0;
+    });
     let park = null;
     if (parkRes && parkRes.documents) {
       const match = parkRes.documents.find(function (d) { return d.category_name && d.category_name.indexOf('공원') !== -1; });
       if (match) park = { name: match.place_name, dist: parseInt(match.distance, 10) };
     }
-    const result = { hospital: pickFirst(hpRes), gov: pickFirst(poRes), park: park };
+    const result = { hospital: hospital, gov: pickFirst(poRes), park: park };
     await env.DATA.put(cacheKey, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 180 });
     return result;
   } catch (e) {
@@ -917,9 +929,9 @@ async function handleRealEstateSearch(url, env) {
     return json({ error: 'lawdCd(5자리)와 budget(억원, 양수)을 정확히 보내주세요.' }, 400);
   }
   const budgetManwon = budget * 10000;
-  // v3: nearby(관공서/병원/공원 실거리) 필드가 추가돼서 예전 캐시를 그대로
-  // 쓰면 6시간 동안 새 필드 없는 결과가 나옴 -> 키 변경.
-  const cacheKey = 're-search3:' + lawdCd + ':' + budget;
+  // v4: 병원 결과에 동물병원이 섞이는 버그를 고치면서 캐시된 값 자체가
+  // 틀렸을 수 있어 키 변경(그대로 두면 6시간 동안 잘못된 값이 나옴).
+  const cacheKey = 're-search4:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -1027,7 +1039,7 @@ async function handleRealEstateSearch(url, env) {
       if (env.KAKAO_API_KEY) {
         const candidates = items.slice(0, KAPT_LOOKUP_LIMIT).filter(function (it) { return it._kaptCode && it._addr; });
         const cacheChecks = await Promise.all(candidates.map(function (it) {
-          return env.DATA.get('re-kakao-dist:' + it._kaptCode);
+          return env.DATA.get('re-kakao-dist2:' + it._kaptCode);
         }));
         const misses = [];
         candidates.forEach(function (it, i) {
