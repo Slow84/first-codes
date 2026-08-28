@@ -848,11 +848,18 @@ async function handleRealEstateSearch(url, env) {
     if (kaptListRaw && env.MOLIT_API_KEY) {
       const kaptList = JSON.parse(kaptListRaw); // [[kaptName, kaptCode], ...]
       const kaptByName = {};
-      kaptList.forEach(function (pair) { if (!(pair[0] in kaptByName)) kaptByName[pair[0]] = pair[1]; });
+      const kaptByNameNoSpace = {}; // 국토부 실거래가 이름과 K-APT 등록명 사이에 띄어쓰기 차이가 있는
+      // 경우가 많아서("래미안 개포 루체하임" vs "래미안개포루체하임") 공백 제거
+      // 버전으로도 한 번 더 매칭 시도함.
+      kaptList.forEach(function (pair) {
+        if (!(pair[0] in kaptByName)) kaptByName[pair[0]] = pair[1];
+        const noSpace = pair[0].replace(/\s+/g, '');
+        if (!(noSpace in kaptByNameNoSpace)) kaptByNameNoSpace[noSpace] = pair[1];
+      });
       const molitKeyForKapt = env.MOLIT_API_KEY.indexOf('%') !== -1 ? decodeURIComponent(env.MOLIT_API_KEY) : env.MOLIT_API_KEY;
       await Promise.all(items.slice(0, HOUSEHOLDS_LIMIT).map(async function (it) {
         const cleanName = it.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
-        const kaptCode = kaptByName[cleanName] || kaptByName[it.name];
+        const kaptCode = kaptByName[cleanName] || kaptByName[it.name] || kaptByNameNoSpace[cleanName.replace(/\s+/g, '')];
         it.households = kaptCode ? await fetchKaptBasis(env, molitKeyForKapt, kaptCode) : null;
       }));
     }
