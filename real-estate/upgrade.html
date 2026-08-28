@@ -302,16 +302,22 @@
     if (!name) return '—';
     return name.split(/[,，]/)[0].trim();
   }
-  // 복지시설(welfareFacility)은 "관리사무소() 노인정() 어린이놀이터()"처럼
-  // 카테고리가 몇 개인지 미리 알 수 없어서, 괄호 안에 실제 값이 있는
-  // 항목만 전부 뽑아 앞에서 몇 개만 짧게 보여줌.
+  // 복지시설(welfareFacility)은 educationFacility/convenientFacility와 달리
+  // "카테고리(값)" 괄호 형식이 아니라 "관리사무소, 노인정, 보육시설"처럼
+  // 그냥 쉼표로 나열된 텍스트로 옴(실제 API 응답으로 직접 확인함) — 두 형식
+  // 다 지원하도록 괄호가 있으면 괄호 안 값을, 없으면 쉼표로 나눈 값을 씀.
   function shortAllText(raw, limit) {
     if (!raw) return '—';
-    var matches = raw.match(/\(([^)]+)\)/g) || [];
-    var vals = [];
-    for (var i = 0; i < matches.length; i++) {
-      var v = matches[i].slice(1, -1).trim();
-      if (v) vals.push(v.split(/[,，]/)[0].trim());
+    var matches = raw.match(/\(([^)]+)\)/g);
+    var vals;
+    if (matches && matches.length) {
+      vals = [];
+      for (var i = 0; i < matches.length; i++) {
+        var v = matches[i].slice(1, -1).trim();
+        if (v) vals.push(v.split(/[,，]/)[0].trim());
+      }
+    } else {
+      vals = raw.split(/[,，]/).map(function (s) { return s.trim(); }).filter(Boolean);
     }
     if (!vals.length) return '—';
     var shown = vals.slice(0, limit || 2);
