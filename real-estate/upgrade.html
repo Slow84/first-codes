@@ -147,8 +147,23 @@
     </div>
 
     <div id="searchStatus" style="margin-top:20px; font-size:14px; color:var(--text-muted);"></div>
+    <p style="margin:6px 0 0; font-size:12.5px; color:var(--text-muted);">→ 표가 넓어서 옆으로 밀어야 다 보여요. "거래가" 칸은 계속 고정돼요.</p>
 
-    <div class="table-wrap" style="margin-top:12px;">
+    <style>
+      /* 표가 18칸이나 돼서 폰에서 옆으로 많이 밀어야 하는데, 밀다 보면 지금
+         어느 줄(어느 아파트/가격)을 보고 있는지 헷갈리기 쉬움 — 첫 칸(거래가)만
+         옆으로 안 움직이게 고정해서 기준점 역할을 하게 함. 다른 표(.data-table
+         쓰는 다른 페이지)엔 영향 안 가도록 #resultTable로만 범위를 좁힘.
+      */
+      #resultTable th:first-child, #resultTable td:first-child {
+        position: sticky;
+        left: 0;
+        background: var(--bg);
+        box-shadow: 2px 0 4px rgba(0,0,0,0.08);
+        z-index: 1;
+      }
+    </style>
+    <div class="table-wrap" style="margin-top:12px; -webkit-overflow-scrolling:touch;">
       <table class="data-table" id="resultTable" style="display:none;">
         <thead><tr>
           <th data-sort="dealAmount">거래가</th>
