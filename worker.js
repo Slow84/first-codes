@@ -835,7 +835,9 @@ const KAKAO_KEYWORD_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
 async function fetchKakaoDistance(env, kaptCode, addr) {
   // v3: 학교/대형마트 실거리 필드가 추가돼서 예전 캐시(re-kakao-dist2)엔 이
   // 필드들이 없음 -> 키 변경.
-  const cacheKey = 're-kakao-dist3:' + kaptCode;
+  // v4: 폐업한 곳("(폐점)")이 섞여 나오는 걸 거르는 필터를 추가하면서 예전
+  // 캐시(re-kakao-dist3)엔 폐업 매장이 그대로 저장돼있을 수 있음 -> 키 변경.
+  const cacheKey = 're-kakao-dist4:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached !== null) return cached === 'null' ? null : JSON.parse(cached);
   if (!addr || !env.KAKAO_API_KEY) return null;
@@ -859,7 +861,7 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
       // 실제로 확인해서(예: "동판교동물병원"이 사람 병원보다 더 가깝게 나옴),
       // 1개만 받으면 걸러낼 여유가 없어 5개 받아서 아래에서 골라냄.
       fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'HP8', size: '5' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
-      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'PO3', size: '1' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'PO3', size: '5' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
       // 공원은 카카오 카테고리 코드에 없어서 키워드 검색으로 대체 — "공원"으로
       // 검색하면 공원 안의 화장실/주차장까지 같이 섞여 나오는 걸 실제로 확인해서
       // (예: "율동공원 개방화장실"이 실제 공원보다 더 가깝게 나옴), category_name에
@@ -870,18 +872,25 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
       // 초등학교를 우선으로 찾음 — 반경 안에 초등학교가 없으면 그냥 가장 가까운
       // 아무 학교나 씀(완전히 없다고 나오는 것보단 나음).
       fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'SC4', size: '5' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
-      // MT1(대형마트)는 실제로 홈플러스익스프레스/GS더프레시 같은 진짜 근처
-      // 대형 슈퍼/마트가 나와서(확인함) 별도 필터 없이 그대로 씀.
-      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'MT1', size: '1', radius: '3000' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; })
+      // MT1(대형마트) — 실제로 홈플러스익스프레스/GS더프레시 같은 진짜 근처
+      // 대형 슈퍼/마트가 나오는데(확인함), size:1로만 받으면 그게 하필 폐업한
+      // 곳이어도 걸러낼 수가 없어서(아래 isOpen 참고) 5개 받아서 그중 골라냄.
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'MT1', size: '5', radius: '3000' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; })
     ]);
+    // 카카오는 폐업한 곳도 목록에서 안 지우고 이름 끝에 "(폐점)"만 붙여서
+    // 그대로 내려줌 — 실제로 "홈플러스 분당오리점 (폐점)"이 대형마트 1등으로
+    // 나오는 걸 확인해서, 모든 카테고리에서 공통으로 걸러냄.
+    function isOpen(d) { return !d.place_name || d.place_name.indexOf('(폐점)') === -1; }
     function pickFirst(res) {
-      const d = res && res.documents && res.documents[0];
+      const docs = res && res.documents;
+      if (!docs) return null;
+      const d = docs.find(isOpen);
       return d ? { name: d.place_name, dist: parseInt(d.distance, 10) } : null;
     }
     function pickFirstMatching(res, filterFn) {
       const docs = res && res.documents;
       if (!docs) return null;
-      const d = docs.find(filterFn);
+      const d = docs.find(function (doc) { return isOpen(doc) && filterFn(doc); });
       return d ? { name: d.place_name, dist: parseInt(d.distance, 10) } : null;
     }
     const hospital = pickFirstMatching(hpRes, function (d) {
@@ -889,7 +898,7 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
     });
     let park = null;
     if (parkRes && parkRes.documents) {
-      const match = parkRes.documents.find(function (d) { return d.category_name && d.category_name.indexOf('공원') !== -1; });
+      const match = parkRes.documents.find(function (d) { return isOpen(d) && d.category_name && d.category_name.indexOf('공원') !== -1; });
       if (match) park = { name: match.place_name, dist: parseInt(match.distance, 10) };
     }
     const school = pickFirstMatching(schoolRes, function (d) { return d.category_name && d.category_name.indexOf('초등학교') !== -1; })
@@ -912,7 +921,8 @@ async function handleRealEstateSearch(url, env) {
   const budgetManwon = budget * 10000;
   // v6: nearby에 학교/대형마트 실거리 필드가 추가돼서 예전 캐시를 그대로 쓰면
   // 6시간 동안 새 필드 없는 결과가 나옴 -> 키 변경.
-  const cacheKey = 're-search6:' + lawdCd + ':' + budget;
+  // v7: 폐업 매장 필터 추가로 캐시된 값이 틀렸을 수 있어 키 변경.
+  const cacheKey = 're-search7:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
