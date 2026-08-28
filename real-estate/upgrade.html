@@ -162,6 +162,11 @@
         box-shadow: 2px 0 4px rgba(0,0,0,0.08);
         z-index: 1;
       }
+      /* 칸 사이 여백(padding)이 18칸에 그대로 다 곱해지면서 전체 폭이
+         불필요하게 넓어져 스크롤 거리가 길어짐 — 기본 .data-table의
+         14px/12px 여백을 이 표만 좁게 줄임. */
+      #resultTable th, #resultTable td { padding-right: 8px; }
+      #resultTable td { padding-top: 8px; padding-bottom: 8px; }
     </style>
     <div class="table-wrap" style="margin-top:12px; -webkit-overflow-scrolling:touch;">
       <table class="data-table" id="resultTable" style="display:none;">
