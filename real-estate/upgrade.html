@@ -169,6 +169,17 @@
       #resultTable th, #resultTable td { padding-right: 5px; }
       #resultTable th { padding-bottom: 6px; }
       #resultTable td { padding-top: 6px; padding-bottom: 6px; }
+      /* 역세권~복지시설(10~17번째 칸)은 "홈플러스익스프레스 분당동판교점"처럼
+         이름이 긴 값이 많이 들어감 — 표 전체에 걸린 white-space:nowrap(줄바꿈
+         금지) 때문에 한 줄로 억지로 늘어나 표가 계속 넓어짐. 이 칸들만 너비를
+         제한하고 자동 줄바꿈을 허용함(학교 칸의 여러 줄과 비슷하게).
+         word-break:keep-all이라, 한글 단어 중간이 아니라 띄어쓰기에서만 끊음. */
+      #resultTable th:nth-child(n+10):nth-child(-n+17),
+      #resultTable td:nth-child(n+10):nth-child(-n+17) {
+        white-space: normal;
+        max-width: 130px;
+        word-break: keep-all;
+      }
     </style>
     <div class="table-wrap" style="margin-top:12px; -webkit-overflow-scrolling:touch;">
       <table class="data-table" id="resultTable" style="display:none;">
