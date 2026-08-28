@@ -162,6 +162,9 @@
           <th>역세권</th>
           <th>인근 학교</th>
           <th>인근 상권</th>
+          <th>관공서</th>
+          <th>병원</th>
+          <th>공원</th>
           <th>지도</th>
         </tr></thead>
         <tbody id="resultBody"></tbody>
@@ -284,8 +287,14 @@
     return abbrevSchool(first);
   }
   function shortFacilityText(raw) {
-    // "상권" 취지에 맞게 상업시설을 관공서/병원보다 우선해서 대표 하나만 표기
-    var name = pickCategory(raw, ['백화점', '대형상가', '대형마트', '관공서', '병원', '공원', '기타']);
+    // "상권"은 상업시설(백화점/대형상가/대형마트)만, 관공서/병원/공원은 각자
+    // 별도 컬럼으로 따로 표시함(아래 pickCategory 직접 호출).
+    var name = pickCategory(raw, ['백화점', '대형상가', '대형마트', '기타']);
+    if (!name) return '—';
+    return name.split(/[,，]/)[0].trim();
+  }
+  function shortOne(raw, category) {
+    var name = pickCategory(raw, [category]);
     if (!name) return '—';
     return name.split(/[,，]/)[0].trim();
   }
@@ -299,12 +308,20 @@
     var subwayText = '—';
     var schoolText = '—';
     var facilityText = '—';
+    var govText = '—';
+    var hospitalText = '—';
+    var parkText = '—';
     if (it.kaptInfo) {
       if (it.kaptInfo.subwayStation) {
         subwayText = (it.kaptInfo.subwayLine || '') + ' ' + it.kaptInfo.subwayStation + '역(' + (it.kaptInfo.subwayWalkTime || '?') + ')';
       }
       if (it.kaptInfo.schools) schoolText = shortSchoolText(it.kaptInfo.schools);
-      if (it.kaptInfo.facilities) facilityText = shortFacilityText(it.kaptInfo.facilities);
+      if (it.kaptInfo.facilities) {
+        facilityText = shortFacilityText(it.kaptInfo.facilities);
+        govText = shortOne(it.kaptInfo.facilities, '관공서');
+        hospitalText = shortOne(it.kaptInfo.facilities, '병원');
+        parkText = shortOne(it.kaptInfo.facilities, '공원');
+      }
     }
     return '<tr>' +
       '<td>' + it.dong + '</td>' +
@@ -318,6 +335,9 @@
       '<td>' + subwayText + '</td>' +
       '<td>' + schoolText + '</td>' +
       '<td>' + facilityText + '</td>' +
+      '<td>' + govText + '</td>' +
+      '<td>' + hospitalText + '</td>' +
+      '<td>' + parkText + '</td>' +
       '<td><a href="' + mapUrl + '" target="_blank" rel="noopener" class="news-link">네이버지도</a></td>' +
       '</tr>';
   }
