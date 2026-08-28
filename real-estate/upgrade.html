@@ -154,17 +154,20 @@
           <th data-sort="dong">동</th>
           <th data-sort="name" style="text-align:left;">아파트</th>
           <th data-sort="households">세대수</th>
+          <th data-sort="parking">주차대수</th>
           <th data-sort="area">전용면적(㎡)</th>
           <th data-sort="floor">층</th>
           <th data-sort="buildYear">준공연도</th>
           <th data-sort="dealAmount">거래가</th>
           <th data-sort="dealDate">거래일</th>
           <th>역세권</th>
+          <th>버스</th>
           <th>인근 학교</th>
           <th>인근 상권</th>
           <th>관공서</th>
           <th>병원</th>
           <th>공원</th>
+          <th>복지시설</th>
           <th>지도</th>
         </tr></thead>
         <tbody id="resultBody"></tbody>
@@ -261,6 +264,7 @@
       case 'dealAmount': return it.dealAmount || 0;
       case 'dealDate': return it.dealDate || '';
       case 'households': return it.households || -1; // 세대수 없는 항목은 정렬 시 맨 뒤로
+      case 'parking': return (it.kaptInfo && parseInt(it.kaptInfo.parkingCount, 10)) || -1;
       default: return 0;
     }
   }
@@ -298,6 +302,21 @@
     if (!name) return '—';
     return name.split(/[,，]/)[0].trim();
   }
+  // 복지시설(welfareFacility)은 "관리사무소() 노인정() 어린이놀이터()"처럼
+  // 카테고리가 몇 개인지 미리 알 수 없어서, 괄호 안에 실제 값이 있는
+  // 항목만 전부 뽑아 앞에서 몇 개만 짧게 보여줌.
+  function shortAllText(raw, limit) {
+    if (!raw) return '—';
+    var matches = raw.match(/\(([^)]+)\)/g) || [];
+    var vals = [];
+    for (var i = 0; i < matches.length; i++) {
+      var v = matches[i].slice(1, -1).trim();
+      if (v) vals.push(v.split(/[,，]/)[0].trim());
+    }
+    if (!vals.length) return '—';
+    var shown = vals.slice(0, limit || 2);
+    return shown.join(', ') + (vals.length > shown.length ? ' 외' : '');
+  }
 
   function renderRow(it) {
     // 국토부 원본 데이터의 아파트명에 "청담2차이-편한세상(201동,202동,203동)"처럼
@@ -306,15 +325,19 @@
     var searchName = it.name.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
     var mapUrl = 'https://map.naver.com/p/search/' + encodeURIComponent(searchName + ' ' + it.dong);
     var subwayText = '—';
+    var busText = '—';
     var schoolText = '—';
     var facilityText = '—';
     var govText = '—';
     var hospitalText = '—';
     var parkText = '—';
+    var welfareText = '—';
+    var parkingText = (it.kaptInfo && it.kaptInfo.parkingCount) ? it.kaptInfo.parkingCount + '대' : '—';
     if (it.kaptInfo) {
       if (it.kaptInfo.subwayStation) {
         subwayText = (it.kaptInfo.subwayLine || '') + ' ' + it.kaptInfo.subwayStation + '역(' + (it.kaptInfo.subwayWalkTime || '?') + ')';
       }
+      if (it.kaptInfo.busWalkTime) busText = it.kaptInfo.busWalkTime + '이내';
       if (it.kaptInfo.schools) schoolText = shortSchoolText(it.kaptInfo.schools);
       if (it.kaptInfo.facilities) {
         facilityText = shortFacilityText(it.kaptInfo.facilities);
@@ -322,22 +345,26 @@
         hospitalText = shortOne(it.kaptInfo.facilities, '병원');
         parkText = shortOne(it.kaptInfo.facilities, '공원');
       }
+      if (it.kaptInfo.welfare) welfareText = shortAllText(it.kaptInfo.welfare, 2);
     }
     return '<tr>' +
       '<td>' + it.dong + '</td>' +
       '<td style="text-align:left;"><strong>' + it.name + '</strong></td>' +
       '<td>' + (it.households ? it.households + '세대' : '—') + '</td>' +
+      '<td>' + parkingText + '</td>' +
       '<td>' + it.area.toFixed(1) + '</td>' +
       '<td>' + it.floor + '층</td>' +
       '<td>' + it.buildYear + '</td>' +
       '<td>' + fmtEok(it.dealAmount) + '</td>' +
       '<td>' + it.dealDate + '</td>' +
       '<td>' + subwayText + '</td>' +
+      '<td>' + busText + '</td>' +
       '<td>' + schoolText + '</td>' +
       '<td>' + facilityText + '</td>' +
       '<td>' + govText + '</td>' +
       '<td>' + hospitalText + '</td>' +
       '<td>' + parkText + '</td>' +
+      '<td>' + welfareText + '</td>' +
       '<td><a href="' + mapUrl + '" target="_blank" rel="noopener" class="news-link">네이버지도</a></td>' +
       '</tr>';
   }

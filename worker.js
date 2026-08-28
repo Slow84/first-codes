@@ -788,7 +788,10 @@ async function fetchKaptBasis(env, molitKey, kaptCode) {
 // 단지코드로 지하철역·도보시간·인근 학교·편의시설 조회 — 이것도 거의 안
 // 바뀌는 값이라 오래 캐시.
 async function fetchKaptDetail(env, molitKey, kaptCode) {
-  const cacheKey = 're-kapt-detail:' + kaptCode;
+  // v2: 버스 도보시간/주차대수/복지시설 필드 추가로 캐시 모양이 바뀌어서
+  // 예전 캐시(re-kapt-detail:)를 그대로 읽으면 새 필드가 없는 채로 60일간
+  // 나올 수 있음 -> 캐시 키 자체를 바꿔서 새로 받아오게 함.
+  const cacheKey = 're-kapt-detail2:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return cached === 'null' ? null : JSON.parse(cached);
   try {
@@ -800,8 +803,11 @@ async function fetchKaptDetail(env, molitKey, kaptCode) {
       subwayLine: item.subwayLine || null,
       subwayStation: item.subwayStation || null,
       subwayWalkTime: item.kaptdWtimesub || null,
+      busWalkTime: item.kaptdWtimebus || null,
+      parkingCount: item.kaptdPcnt || null,
       schools: item.educationFacility || null,
-      facilities: item.convenientFacility || null
+      facilities: item.convenientFacility || null,
+      welfare: item.welfareFacility || null
     } : null;
     await env.DATA.put(cacheKey, detail ? JSON.stringify(detail) : 'null', { expirationTtl: 60 * 60 * 24 * 60 });
     return detail;
@@ -818,7 +824,9 @@ async function handleRealEstateSearch(url, env) {
     return json({ error: 'lawdCd(5자리)와 budget(억원, 양수)을 정확히 보내주세요.' }, 400);
   }
   const budgetManwon = budget * 10000;
-  const cacheKey = 're-search:' + lawdCd + ':' + budget;
+  // v2: kaptInfo 안 필드(버스 도보시간/주차대수/복지시설)가 늘어나서 예전
+  // 캐시(re-search:)를 그대로 쓰면 6시간 동안 새 필드 없는 결과가 나옴 -> 키 변경.
+  const cacheKey = 're-search2:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
