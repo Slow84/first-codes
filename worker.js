@@ -833,7 +833,9 @@ const KAKAO_CATEGORY_URL = 'https://dapi.kakao.com/v2/local/search/category.json
 const KAKAO_KEYWORD_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
 
 async function fetchKakaoDistance(env, kaptCode, addr) {
-  const cacheKey = 're-kakao-dist2:' + kaptCode;
+  // v3: 학교/대형마트 실거리 필드가 추가돼서 예전 캐시(re-kakao-dist2)엔 이
+  // 필드들이 없음 -> 키 변경.
+  const cacheKey = 're-kakao-dist3:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached !== null) return cached === 'null' ? null : JSON.parse(cached);
   if (!addr || !env.KAKAO_API_KEY) return null;
@@ -852,7 +854,7 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
     const nearestParams = function (extra) {
       return new URLSearchParams(Object.assign({ x: x, y: y, radius: '2000', sort: 'distance' }, extra)).toString();
     };
-    const [hpRes, poRes, parkRes] = await Promise.all([
+    const [hpRes, poRes, parkRes, schoolRes, martRes] = await Promise.all([
       // size:5 — HP8(병원) 카테고리에 동물병원(수의과)도 같이 섞여 나오는 걸
       // 실제로 확인해서(예: "동판교동물병원"이 사람 병원보다 더 가깝게 나옴),
       // 1개만 받으면 걸러낼 여유가 없어 5개 받아서 아래에서 골라냄.
@@ -863,7 +865,14 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
       // (예: "율동공원 개방화장실"이 실제 공원보다 더 가깝게 나옴), category_name에
       // "공원"이 들어간 것만 골라내야 함. size:10으로 여유있게 받아서 그중 첫
       // 번째 진짜 공원을 찾음.
-      fetch(KAKAO_KEYWORD_URL + '?' + nearestParams({ query: '공원', size: '10' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; })
+      fetch(KAKAO_KEYWORD_URL + '?' + nearestParams({ query: '공원', size: '10' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+      // SC4(학교)는 초/중/고가 다 섞여 나와서(실제 확인함), "초품아" 맥락에 맞게
+      // 초등학교를 우선으로 찾음 — 반경 안에 초등학교가 없으면 그냥 가장 가까운
+      // 아무 학교나 씀(완전히 없다고 나오는 것보단 나음).
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'SC4', size: '5' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+      // MT1(대형마트)는 실제로 홈플러스익스프레스/GS더프레시 같은 진짜 근처
+      // 대형 슈퍼/마트가 나와서(확인함) 별도 필터 없이 그대로 씀.
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'MT1', size: '1', radius: '3000' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; })
     ]);
     function pickFirst(res) {
       const d = res && res.documents && res.documents[0];
@@ -883,7 +892,9 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
       const match = parkRes.documents.find(function (d) { return d.category_name && d.category_name.indexOf('공원') !== -1; });
       if (match) park = { name: match.place_name, dist: parseInt(match.distance, 10) };
     }
-    const result = { hospital: hospital, gov: pickFirst(poRes), park: park };
+    const school = pickFirstMatching(schoolRes, function (d) { return d.category_name && d.category_name.indexOf('초등학교') !== -1; })
+      || pickFirst(schoolRes);
+    const result = { hospital: hospital, gov: pickFirst(poRes), park: park, school: school, mart: pickFirst(martRes) };
     await env.DATA.put(cacheKey, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 180 });
     return result;
   } catch (e) {
@@ -899,9 +910,9 @@ async function handleRealEstateSearch(url, env) {
     return json({ error: 'lawdCd(5자리)와 budget(억원, 양수)을 정확히 보내주세요.' }, 400);
   }
   const budgetManwon = budget * 10000;
-  // v5: Paid 플랜 전환으로 커버리지가 12개/5개 제한에서 전체(최대 50개)로
-  // 늘어나서, 예전 캐시를 그대로 쓰면 6시간 동안 일부만 채워진 결과가 나옴 -> 키 변경.
-  const cacheKey = 're-search5:' + lawdCd + ':' + budget;
+  // v6: nearby에 학교/대형마트 실거리 필드가 추가돼서 예전 캐시를 그대로 쓰면
+  // 6시간 동안 새 필드 없는 결과가 나옴 -> 키 변경.
+  const cacheKey = 're-search6:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 

@@ -122,7 +122,7 @@
 
     <div class="callout" style="margin-top: 20px;">
       <strong>ℹ 참고</strong>
-역세권·인근 학교·인근 상권 정보는 국토교통부 공동주택 정보(K-APT)에 등록된 단지에 한해 나와요 — 상위 20건까지만 조회되고, 실제 거리(m)는 이 데이터에 없어서 대표 시설 이름만 표시돼요. 대출한도(LTV·DSR) 계산은 아직 준비 중이에요. 위치는 별도 API 없이, 결과 각 줄의 "네이버지도에서 보기" 링크로 확인해요.
+역세권·인근 학교·관공서·병원·공원·상권 정보는 국토교통부 공동주택 정보(K-APT)에 등록된 단지에 한해 나와요. 병원·관공서·공원·학교·상권은 카카오 API로 실제 거리(m)까지 계산해서 표시하고, 지하철·버스는 도보 몇 분 이내인지로 표시돼요. 대출한도(LTV·DSR) 계산은 아직 준비 중이에요. 위치는 결과 각 줄의 "네이버지도에서 보기" 링크로 확인해요.
     </div>
 
     <div class="chart-card" style="margin-top: 28px; max-width: 560px; padding: 24px;">
@@ -385,6 +385,8 @@
       govText = withDist(it.nearby.gov, govText);
       hospitalText = withDist(it.nearby.hospital, hospitalText);
       parkText = withDist(it.nearby.park, parkText);
+      schoolText = withDist(it.nearby.school, schoolText);
+      facilityText = withDist(it.nearby.mart, facilityText);
     }
     return '<tr>' +
       '<td>' + fmtEok(it.dealAmount) + '</td>' +
