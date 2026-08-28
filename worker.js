@@ -831,7 +831,6 @@ async function fetchKaptDetail(env, molitKey, kaptCode) {
 const KAKAO_ADDRESS_URL = 'https://dapi.kakao.com/v2/local/search/address.json';
 const KAKAO_CATEGORY_URL = 'https://dapi.kakao.com/v2/local/search/category.json';
 const KAKAO_KEYWORD_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
-const KAKAO_PENDING_KEY = 're-kakao-pending';
 
 async function fetchKakaoDistance(env, kaptCode, addr) {
   const cacheKey = 're-kakao-dist2:' + kaptCode;
@@ -892,35 +891,6 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
   }
 }
 
-// 한 번의 검색 요청에서 Cloudflare Worker의 subrequest 한도(약 50개) 때문에
-// 실시간으로 계산 못 한 항목들을 여기 쌓아두고, 매시 정각 Cron(아래 scheduled
-// 참고)이 조금씩 처리함 — 인기 지역은 몇 번 검색되고 나면 대부분 캐시가 채워져서
-// 실시간 계산 없이도 바로 거리가 나오게 됨.
-async function addKakaoPending(env, entries) {
-  if (!entries.length) return;
-  const raw = await env.DATA.get(KAKAO_PENDING_KEY);
-  const list = raw ? JSON.parse(raw) : [];
-  const seen = {};
-  list.forEach(function (e) { seen[e.kaptCode] = true; });
-  let added = false;
-  entries.forEach(function (e) {
-    if (!seen[e.kaptCode]) { list.push(e); seen[e.kaptCode] = true; added = true; }
-  });
-  if (!added) return;
-  await env.DATA.put(KAKAO_PENDING_KEY, JSON.stringify(list.slice(-1000)));
-}
-
-async function processKakaoPendingQueue(env) {
-  if (!env.KAKAO_API_KEY) return;
-  const raw = await env.DATA.get(KAKAO_PENDING_KEY);
-  const list = raw ? JSON.parse(raw) : [];
-  if (!list.length) return;
-  const BATCH = 10; // 10 * 4(지오코딩+병원+관공서+공원) = 40 <= 50, cron 호출도 같은 한도를 씀
-  const batch = list.slice(0, BATCH);
-  await Promise.all(batch.map(function (e) { return fetchKakaoDistance(env, e.kaptCode, e.addr); }));
-  await env.DATA.put(KAKAO_PENDING_KEY, JSON.stringify(list.slice(BATCH)));
-}
-
 async function handleRealEstateSearch(url, env) {
   if (!env.MOLIT_API_KEY) return json({ error: '실거래가 조회 기능이 아직 설정되지 않았어요.' }, 502);
   const lawdCd = (url.searchParams.get('lawdCd') || '').trim();
@@ -929,9 +899,9 @@ async function handleRealEstateSearch(url, env) {
     return json({ error: 'lawdCd(5자리)와 budget(억원, 양수)을 정확히 보내주세요.' }, 400);
   }
   const budgetManwon = budget * 10000;
-  // v4: 병원 결과에 동물병원이 섞이는 버그를 고치면서 캐시된 값 자체가
-  // 틀렸을 수 있어 키 변경(그대로 두면 6시간 동안 잘못된 값이 나옴).
-  const cacheKey = 're-search4:' + lawdCd + ':' + budget;
+  // v5: Paid 플랜 전환으로 커버리지가 12개/5개 제한에서 전체(최대 50개)로
+  // 늘어나서, 예전 캐시를 그대로 쓰면 6시간 동안 일부만 채워진 결과가 나옴 -> 키 변경.
+  const cacheKey = 're-search5:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -988,11 +958,12 @@ async function handleRealEstateSearch(url, env) {
     // (지하철역·도보시간·인근학교·편의시설)를 같이 조회함 — 둘 다 같은
     // kaptCode를 쓰므로 한 번만 매칭하면 됨. 목록 캐시가 아직 없는 지역이면
     // 그냥 조용히 건너뜀(모든 값 null) — 검색 자체가 실패하면 안 되니까.
-    // 2026-08-28: 관공서/병원/공원 실거리(카카오 API)를 추가하면서 항목당
-    // 호출 수가 늘어나 20개를 그대로 유지할 수 없게 됨(아래 카카오 단계 주석
-    // 참고) — 세대수/지하철/학교이름 커버리지를 12개로 줄이는 대신, 그 12개
-    // 안에서는 실거리도 같이 나오게 함.
-    const KAPT_LOOKUP_LIMIT = 12; // MOLIT 3건 + (기본정보+상세정보) 2*12=24
+    // 2026-08-28: Cloudflare Workers Paid 플랜으로 전환하면서 요청당
+    // subrequest 한도가 50 -> 10,000으로 늘어남 — 그 전엔 세대수/지하철/
+    // 학교이름(12개)과 카카오 실거리(5개)를 나눠 쓰던 구간이었는데, 이제
+    // items가 최대 50개니까 그냥 전부 다 처리해도 여유 있음(worst case
+    // 3 + 50*2 + 50*4 = 303 << 10,000).
+    const KAPT_LOOKUP_LIMIT = items.length;
     const kaptListRaw = await env.DATA.get(KAPT_REGION_PREFIX + lawdCd);
     if (kaptListRaw && env.MOLIT_API_KEY) {
       const kaptList = JSON.parse(kaptListRaw); // [[kaptName, kaptCode], ...]
@@ -1033,28 +1004,13 @@ async function handleRealEstateSearch(url, env) {
       }));
 
       // 관공서/병원/공원 실거리 — 세대수/학교이름과 같은 kaptCode 매칭 결과를
-      // 재사용함. 캐시부터 확인해서(무료) 이미 계산돼있는 건 바로 쓰고, 처음
-      // 보는 것만 그 자리에서 계산함 — 이것도 한도 안에서만.
-      const KAKAO_LIVE_LIMIT = 5; // 5 * 4(지오코딩+병원+관공서+공원) = 20 <= 남은 예산(50 - 3 - 24 = 23)
+      // 재사용함. Paid 플랜 이후로는 한도 걱정 없이 매칭된 항목 전부 그 자리에서
+      // 계산함(캐시가 있으면 fetchKakaoDistance 안에서 바로 재사용됨).
       if (env.KAKAO_API_KEY) {
-        const candidates = items.slice(0, KAPT_LOOKUP_LIMIT).filter(function (it) { return it._kaptCode && it._addr; });
-        const cacheChecks = await Promise.all(candidates.map(function (it) {
-          return env.DATA.get('re-kakao-dist2:' + it._kaptCode);
-        }));
-        const misses = [];
-        candidates.forEach(function (it, i) {
-          const raw = cacheChecks[i];
-          if (raw === null) misses.push(it);
-          else it.nearby = raw === 'null' ? null : JSON.parse(raw);
-        });
-        const freshBatch = misses.slice(0, KAKAO_LIVE_LIMIT);
-        await Promise.all(freshBatch.map(async function (it) {
+        const candidates = items.filter(function (it) { return it._kaptCode && it._addr; });
+        await Promise.all(candidates.map(async function (it) {
           it.nearby = await fetchKakaoDistance(env, it._kaptCode, it._addr);
         }));
-        const stillPending = misses.slice(KAKAO_LIVE_LIMIT);
-        if (stillPending.length) {
-          await addKakaoPending(env, stillPending.map(function (it) { return { kaptCode: it._kaptCode, addr: it._addr }; }));
-        }
       }
       items.forEach(function (it) { delete it._kaptCode; delete it._addr; });
     }
@@ -1366,15 +1322,6 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
-    // 매시 정각 Cron이 하는 일(관공서/병원/공원 실거리 backlog 처리)을 수동으로
-    // 바로 실행해봄 — 배포 직후 실제로 캐시가 채워지는지 1시간 기다리지 않고
-    // 바로 확인하기 위한 것.
-    if (url.pathname === '/api/real-estate-kakao-tick') {
-      await processKakaoPendingQueue(env);
-      const raw = await env.DATA.get(KAKAO_PENDING_KEY);
-      return json({ pendingRemaining: raw ? JSON.parse(raw).length : 0 });
-    }
-
     if (url.pathname === '/api/news-stats') {
       if (request.method === 'GET') return handleNewsStats(url, env);
       return new Response('Method not allowed', { status: 405 });
@@ -1393,11 +1340,8 @@ export default {
   },
 
   // Cron Trigger — see wrangler.toml `[triggers]`. Runs hourly to log one
-  // 긍정/부정 뉴스 발생수 point (see computeNewsStatPoint above), and to chip
-  // away at the 관공서/병원/공원 실거리 backlog that live searches couldn't
-  // fit under the per-request subrequest budget (see addKakaoPending).
+  // 긍정/부정 뉴스 발생수 point (see computeNewsStatPoint above).
   async scheduled(event, env, ctx) {
     ctx.waitUntil(logNewsStatPoint(env));
-    ctx.waitUntil(processKakaoPendingQueue(env));
   }
 };
