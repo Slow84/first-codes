@@ -888,10 +888,22 @@ async function handleRealEstateSearch(url, env) {
         const noSpace = pair[0].replace(/\s+/g, '');
         if (!(noSpace in kaptByNameNoSpace)) kaptByNameNoSpace[noSpace] = pair[1];
       });
+      // 마지막 보정: 판교/정자/이매 같은 동네 이름이 K-APT 등록명 앞에 붙어있는
+      // 경우가 많아서("백현마을8단지(대림)" -> K-APT엔 "판교백현마을8단지")
+      // 정확히 일치/공백제거로도 못 찾으면, "K-APT 이름이 우리 이름으로 끝나는지"
+      // 를 마지막으로 한 번 더 찾아봄(찾으면 첫 매치 사용).
+      function findByEndsWith(name) {
+        if (!name) return null;
+        for (var i = 0; i < kaptList.length; i++) {
+          if (kaptList[i][0].endsWith(name)) return kaptList[i][1];
+        }
+        return null;
+      }
       const molitKeyForKapt = env.MOLIT_API_KEY.indexOf('%') !== -1 ? decodeURIComponent(env.MOLIT_API_KEY) : env.MOLIT_API_KEY;
       await Promise.all(items.slice(0, KAPT_LOOKUP_LIMIT).map(async function (it) {
         const cleanName = it.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
-        const kaptCode = kaptByName[cleanName] || kaptByName[it.name] || kaptByNameNoSpace[cleanName.replace(/\s+/g, '')];
+        const noSpaceName = cleanName.replace(/\s+/g, '');
+        const kaptCode = kaptByName[cleanName] || kaptByName[it.name] || kaptByNameNoSpace[noSpaceName] || findByEndsWith(noSpaceName);
         if (!kaptCode) { it.households = null; it.kaptInfo = null; return; }
         const [households, detail] = await Promise.all([
           fetchKaptBasis(env, molitKeyForKapt, kaptCode),
