@@ -347,6 +347,18 @@
       }
       if (it.kaptInfo.welfare) welfareText = shortAllText(it.kaptInfo.welfare, 2);
     }
+    // 카카오 API로 계산한 실제 거리(미터)가 있으면 그걸로 덮어씀 — K-APT
+    // 데이터엔 이름만 있고 거리가 아예 없어서, 실제 숫자는 이쪽에서만 나옴.
+    // 아직 계산 전(첫 검색이거나 backlog 대기 중)이면 기존 이름만 그대로 둠.
+    function withDist(entry, fallback) {
+      if (entry && entry.dist != null) return entry.name + ' (' + entry.dist + 'm)';
+      return fallback;
+    }
+    if (it.nearby) {
+      govText = withDist(it.nearby.gov, govText);
+      hospitalText = withDist(it.nearby.hospital, hospitalText);
+      parkText = withDist(it.nearby.park, parkText);
+    }
     return '<tr>' +
       '<td>' + fmtEok(it.dealAmount) + '</td>' +
       '<td>' + it.dong + '</td>' +

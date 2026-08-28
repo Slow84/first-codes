@@ -766,10 +766,13 @@ async function handleRealEstateAptListRefresh(request, env) {
   }
 }
 
-// 단지코드로 세대수 등 기본정보 조회 — kaptCode별로 오래 캐시(세대수는 거의
-// 안 바뀜).
+// 단지코드로 세대수 + 도로명주소 조회 — kaptCode별로 오래 캐시(둘 다 거의
+// 안 바뀜). 주소는 카카오 지오코딩(주소->좌표 변환)에 재사용하려고 같이 받아둠
+// (같은 호출에 이미 들어있는 값이라 이것 때문에 별도 호출을 늘릴 필요 없음).
 async function fetchKaptBasis(env, molitKey, kaptCode) {
-  const cacheKey = 're-kapt-basis:' + kaptCode;
+  // v2: 주소(addr) 필드 추가로 캐시 모양이 바뀌어서 예전 캐시(re-kapt-basis:,
+  // 숫자 하나만 저장돼 있음)를 그대로 읽으면 주소가 없는 채로 나옴 -> 키 변경.
+  const cacheKey = 're-kapt-basis2:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return cached === 'null' ? null : JSON.parse(cached);
   try {
@@ -777,9 +780,12 @@ async function fetchKaptBasis(env, molitKey, kaptCode) {
     const r = await fetch(KAPT_BASIS_URL + '?' + params.toString());
     const data = await r.json();
     const item = data.response && data.response.body && data.response.body.item;
-    const households = item && item.kaptdaCnt ? parseInt(item.kaptdaCnt, 10) : null;
-    await env.DATA.put(cacheKey, households != null ? String(households) : 'null', { expirationTtl: 60 * 60 * 24 * 60 });
-    return households;
+    const result = item ? {
+      households: item.kaptdaCnt ? parseInt(item.kaptdaCnt, 10) : null,
+      addr: item.doroJuso || item.kaptAddr || null
+    } : null;
+    await env.DATA.put(cacheKey, result ? JSON.stringify(result) : 'null', { expirationTtl: 60 * 60 * 24 * 60 });
+    return result;
   } catch (e) {
     return null;
   }
@@ -816,6 +822,93 @@ async function fetchKaptDetail(env, molitKey, kaptCode) {
   }
 }
 
+// 카카오 로컬 API — 주소를 좌표로 바꾼 뒤(지오코딩), 그 좌표에서 가장 가까운
+// 병원/관공서/공원을 "이름 + 실제 거리(m)"로 찾음. K-APT API(위 fetchKaptDetail)는
+// "카테고리(이름)" 나열 텍스트만 줄 뿐 거리가 아예 없어서, 실제 미터 숫자가
+// 필요하면 이 API가 유일한 방법임(2026-08-28 확인).
+// kaptCode 하나당 결과를 오래 캐시함 — 아파트의 물리적 위치와 주변 병원/공원은
+// 하루아침에 안 바뀌는 값이라, 한 번 계산해두면 이후 검색에서는 재사용만 하면 됨.
+const KAKAO_ADDRESS_URL = 'https://dapi.kakao.com/v2/local/search/address.json';
+const KAKAO_CATEGORY_URL = 'https://dapi.kakao.com/v2/local/search/category.json';
+const KAKAO_KEYWORD_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
+const KAKAO_PENDING_KEY = 're-kakao-pending';
+
+async function fetchKakaoDistance(env, kaptCode, addr) {
+  const cacheKey = 're-kakao-dist:' + kaptCode;
+  const cached = await env.DATA.get(cacheKey);
+  if (cached !== null) return cached === 'null' ? null : JSON.parse(cached);
+  if (!addr || !env.KAKAO_API_KEY) return null;
+  try {
+    const headers = { Authorization: 'KakaoAK ' + env.KAKAO_API_KEY };
+    const geoRes = await fetch(KAKAO_ADDRESS_URL + '?' + new URLSearchParams({ query: addr }), { headers });
+    const geoData = await geoRes.json();
+    const geoDoc = geoData.documents && geoData.documents[0];
+    if (!geoDoc) {
+      // 주소를 못 찾은 경우 — K-APT 주소 표기가 특이해서일 수 있으니, 계속
+      // 재시도하느라 매번 지오코딩 호출을 낭비하지 않게 30일만 짧게 캐시.
+      await env.DATA.put(cacheKey, 'null', { expirationTtl: 60 * 60 * 24 * 30 });
+      return null;
+    }
+    const x = geoDoc.x, y = geoDoc.y;
+    const nearestParams = function (extra) {
+      return new URLSearchParams(Object.assign({ x: x, y: y, radius: '2000', sort: 'distance' }, extra)).toString();
+    };
+    const [hpRes, poRes, parkRes] = await Promise.all([
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'HP8', size: '1' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'PO3', size: '1' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+      // 공원은 카카오 카테고리 코드에 없어서 키워드 검색으로 대체 — "공원"으로
+      // 검색하면 공원 안의 화장실/주차장까지 같이 섞여 나오는 걸 실제로 확인해서
+      // (예: "율동공원 개방화장실"이 실제 공원보다 더 가깝게 나옴), category_name에
+      // "공원"이 들어간 것만 골라내야 함. size:10으로 여유있게 받아서 그중 첫
+      // 번째 진짜 공원을 찾음.
+      fetch(KAKAO_KEYWORD_URL + '?' + nearestParams({ query: '공원', size: '10' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; })
+    ]);
+    function pickFirst(res) {
+      const d = res && res.documents && res.documents[0];
+      return d ? { name: d.place_name, dist: parseInt(d.distance, 10) } : null;
+    }
+    let park = null;
+    if (parkRes && parkRes.documents) {
+      const match = parkRes.documents.find(function (d) { return d.category_name && d.category_name.indexOf('공원') !== -1; });
+      if (match) park = { name: match.place_name, dist: parseInt(match.distance, 10) };
+    }
+    const result = { hospital: pickFirst(hpRes), gov: pickFirst(poRes), park: park };
+    await env.DATA.put(cacheKey, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 180 });
+    return result;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 한 번의 검색 요청에서 Cloudflare Worker의 subrequest 한도(약 50개) 때문에
+// 실시간으로 계산 못 한 항목들을 여기 쌓아두고, 매시 정각 Cron(아래 scheduled
+// 참고)이 조금씩 처리함 — 인기 지역은 몇 번 검색되고 나면 대부분 캐시가 채워져서
+// 실시간 계산 없이도 바로 거리가 나오게 됨.
+async function addKakaoPending(env, entries) {
+  if (!entries.length) return;
+  const raw = await env.DATA.get(KAKAO_PENDING_KEY);
+  const list = raw ? JSON.parse(raw) : [];
+  const seen = {};
+  list.forEach(function (e) { seen[e.kaptCode] = true; });
+  let added = false;
+  entries.forEach(function (e) {
+    if (!seen[e.kaptCode]) { list.push(e); seen[e.kaptCode] = true; added = true; }
+  });
+  if (!added) return;
+  await env.DATA.put(KAKAO_PENDING_KEY, JSON.stringify(list.slice(-1000)));
+}
+
+async function processKakaoPendingQueue(env) {
+  if (!env.KAKAO_API_KEY) return;
+  const raw = await env.DATA.get(KAKAO_PENDING_KEY);
+  const list = raw ? JSON.parse(raw) : [];
+  if (!list.length) return;
+  const BATCH = 10; // 10 * 4(지오코딩+병원+관공서+공원) = 40 <= 50, cron 호출도 같은 한도를 씀
+  const batch = list.slice(0, BATCH);
+  await Promise.all(batch.map(function (e) { return fetchKakaoDistance(env, e.kaptCode, e.addr); }));
+  await env.DATA.put(KAKAO_PENDING_KEY, JSON.stringify(list.slice(BATCH)));
+}
+
 async function handleRealEstateSearch(url, env) {
   if (!env.MOLIT_API_KEY) return json({ error: '실거래가 조회 기능이 아직 설정되지 않았어요.' }, 502);
   const lawdCd = (url.searchParams.get('lawdCd') || '').trim();
@@ -824,9 +917,9 @@ async function handleRealEstateSearch(url, env) {
     return json({ error: 'lawdCd(5자리)와 budget(억원, 양수)을 정확히 보내주세요.' }, 400);
   }
   const budgetManwon = budget * 10000;
-  // v2: kaptInfo 안 필드(버스 도보시간/주차대수/복지시설)가 늘어나서 예전
-  // 캐시(re-search:)를 그대로 쓰면 6시간 동안 새 필드 없는 결과가 나옴 -> 키 변경.
-  const cacheKey = 're-search2:' + lawdCd + ':' + budget;
+  // v3: nearby(관공서/병원/공원 실거리) 필드가 추가돼서 예전 캐시를 그대로
+  // 쓰면 6시간 동안 새 필드 없는 결과가 나옴 -> 키 변경.
+  const cacheKey = 're-search3:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -883,7 +976,11 @@ async function handleRealEstateSearch(url, env) {
     // (지하철역·도보시간·인근학교·편의시설)를 같이 조회함 — 둘 다 같은
     // kaptCode를 쓰므로 한 번만 매칭하면 됨. 목록 캐시가 아직 없는 지역이면
     // 그냥 조용히 건너뜀(모든 값 null) — 검색 자체가 실패하면 안 되니까.
-    const KAPT_LOOKUP_LIMIT = 20; // MOLIT 3건 + (기본정보+상세정보) 2*20=40 <= 50 (Cloudflare Worker 요청당 subrequest 한도)
+    // 2026-08-28: 관공서/병원/공원 실거리(카카오 API)를 추가하면서 항목당
+    // 호출 수가 늘어나 20개를 그대로 유지할 수 없게 됨(아래 카카오 단계 주석
+    // 참고) — 세대수/지하철/학교이름 커버리지를 12개로 줄이는 대신, 그 12개
+    // 안에서는 실거리도 같이 나오게 함.
+    const KAPT_LOOKUP_LIMIT = 12; // MOLIT 3건 + (기본정보+상세정보) 2*12=24
     const kaptListRaw = await env.DATA.get(KAPT_REGION_PREFIX + lawdCd);
     if (kaptListRaw && env.MOLIT_API_KEY) {
       const kaptList = JSON.parse(kaptListRaw); // [[kaptName, kaptCode], ...]
@@ -913,13 +1010,41 @@ async function handleRealEstateSearch(url, env) {
         const noSpaceName = cleanName.replace(/\s+/g, '');
         const kaptCode = kaptByName[cleanName] || kaptByName[it.name] || kaptByNameNoSpace[noSpaceName] || findByEndsWith(noSpaceName);
         if (!kaptCode) { it.households = null; it.kaptInfo = null; return; }
-        const [households, detail] = await Promise.all([
+        const [basis, detail] = await Promise.all([
           fetchKaptBasis(env, molitKeyForKapt, kaptCode),
           fetchKaptDetail(env, molitKeyForKapt, kaptCode)
         ]);
-        it.households = households;
+        it.households = basis ? basis.households : null;
         it.kaptInfo = detail;
+        it._kaptCode = kaptCode;
+        it._addr = basis ? basis.addr : null;
       }));
+
+      // 관공서/병원/공원 실거리 — 세대수/학교이름과 같은 kaptCode 매칭 결과를
+      // 재사용함. 캐시부터 확인해서(무료) 이미 계산돼있는 건 바로 쓰고, 처음
+      // 보는 것만 그 자리에서 계산함 — 이것도 한도 안에서만.
+      const KAKAO_LIVE_LIMIT = 5; // 5 * 4(지오코딩+병원+관공서+공원) = 20 <= 남은 예산(50 - 3 - 24 = 23)
+      if (env.KAKAO_API_KEY) {
+        const candidates = items.slice(0, KAPT_LOOKUP_LIMIT).filter(function (it) { return it._kaptCode && it._addr; });
+        const cacheChecks = await Promise.all(candidates.map(function (it) {
+          return env.DATA.get('re-kakao-dist:' + it._kaptCode);
+        }));
+        const misses = [];
+        candidates.forEach(function (it, i) {
+          const raw = cacheChecks[i];
+          if (raw === null) misses.push(it);
+          else it.nearby = raw === 'null' ? null : JSON.parse(raw);
+        });
+        const freshBatch = misses.slice(0, KAKAO_LIVE_LIMIT);
+        await Promise.all(freshBatch.map(async function (it) {
+          it.nearby = await fetchKakaoDistance(env, it._kaptCode, it._addr);
+        }));
+        const stillPending = misses.slice(KAKAO_LIVE_LIMIT);
+        if (stillPending.length) {
+          await addKakaoPending(env, stillPending.map(function (it) { return { kaptCode: it._kaptCode, addr: it._addr }; }));
+        }
+      }
+      items.forEach(function (it) { delete it._kaptCode; delete it._addr; });
     }
 
     const text = JSON.stringify({ items: items, months: months });
@@ -1229,6 +1354,15 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
+    // 매시 정각 Cron이 하는 일(관공서/병원/공원 실거리 backlog 처리)을 수동으로
+    // 바로 실행해봄 — 배포 직후 실제로 캐시가 채워지는지 1시간 기다리지 않고
+    // 바로 확인하기 위한 것.
+    if (url.pathname === '/api/real-estate-kakao-tick') {
+      await processKakaoPendingQueue(env);
+      const raw = await env.DATA.get(KAKAO_PENDING_KEY);
+      return json({ pendingRemaining: raw ? JSON.parse(raw).length : 0 });
+    }
+
     if (url.pathname === '/api/news-stats') {
       if (request.method === 'GET') return handleNewsStats(url, env);
       return new Response('Method not allowed', { status: 405 });
@@ -1247,8 +1381,11 @@ export default {
   },
 
   // Cron Trigger — see wrangler.toml `[triggers]`. Runs hourly to log one
-  // 긍정/부정 뉴스 발생수 point (see computeNewsStatPoint above).
+  // 긍정/부정 뉴스 발생수 point (see computeNewsStatPoint above), and to chip
+  // away at the 관공서/병원/공원 실거리 backlog that live searches couldn't
+  // fit under the per-request subrequest budget (see addKakaoPending).
   async scheduled(event, env, ctx) {
     ctx.waitUntil(logNewsStatPoint(env));
+    ctx.waitUntil(processKakaoPendingQueue(env));
   }
 };
