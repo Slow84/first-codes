@@ -342,7 +342,10 @@
     var notable = vals.filter(function (v) { return WELFARE_BASELINE.indexOf(v) === -1; });
     if (!notable.length) return vals.length ? '기본시설만' : '—';
     var shown = notable.slice(0, limit || 3);
-    return shown.join(', ') + (notable.length > shown.length ? ' 외' : '');
+    // 학교 칸(초/중/고)처럼 여러 개일 땐 쉼표로 한 줄에 몰아넣지 않고 하나씩
+    // 줄바꿈해서 보여줌 — 가로로 늘어놓으면 표가 더 넓어져서 세로로 쌓음.
+    var html = shown.join('<br>');
+    return notable.length > shown.length ? html + '<br>외 ' + (notable.length - shown.length) + '개' : html;
   }
 
   function renderRow(it) {
@@ -387,7 +390,11 @@
       govText = withDist(it.nearby.gov, govText);
       hospitalText = withDist(it.nearby.hospital, hospitalText);
       parkText = withDist(it.nearby.park, parkText);
-      schoolText = withDist(it.nearby.school, schoolText);
+      // 학교는 초/중/고 중 있는 만큼 배열로 옴(worker.js 참고) — 여러 개면
+      // 한 칸 안에서 줄바꿈으로 하나씩 보여줌(가로로 늘어놓으면 표가 더 넓어짐).
+      if (it.nearby.schools && it.nearby.schools.length) {
+        schoolText = it.nearby.schools.map(function (s) { return s.name + ' (' + s.dist + 'm)'; }).join('<br>');
+      }
       facilityText = withDist(it.nearby.mart, facilityText);
       subwayText = withDist(it.nearby.subway, subwayText);
       // 버스는 카카오 로컬 API에 정류장 데이터 자체가 없어서(실제 확인함)

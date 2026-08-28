@@ -847,7 +847,8 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
   // v4: 폐업한 곳("(폐점)")이 섞여 나오는 걸 거르는 필터를 추가하면서 예전
   // 캐시(re-kakao-dist3)엔 폐업 매장이 그대로 저장돼있을 수 있음 -> 키 변경.
   // v5: 지하철역 실거리(subway) 필드 추가로 캐시 키 변경.
-  const cacheKey = 're-kakao-dist5:' + kaptCode;
+  // v6: school(단일)이 schools(배열, 초/중/고 각각)로 바뀌어서 캐시 키 변경.
+  const cacheKey = 're-kakao-dist6:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached !== null) return cached === 'null' ? null : JSON.parse(cached);
   if (!addr || !env.KAKAO_API_KEY) return null;
@@ -878,10 +879,10 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
       // "공원"이 들어간 것만 골라내야 함. size:10으로 여유있게 받아서 그중 첫
       // 번째 진짜 공원을 찾음.
       fetch(KAKAO_KEYWORD_URL + '?' + nearestParams({ query: '공원', size: '10' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
-      // SC4(학교)는 초/중/고가 다 섞여 나와서(실제 확인함), "초품아" 맥락에 맞게
-      // 초등학교를 우선으로 찾음 — 반경 안에 초등학교가 없으면 그냥 가장 가까운
-      // 아무 학교나 씀(완전히 없다고 나오는 것보단 나음).
-      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'SC4', size: '5' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+      // SC4(학교)는 초/중/고가 다 섞여 나옴(실제 확인함) — 초/중/고 각각
+      // 가장 가까운 곳을 따로 찾아야 해서 size를 15로 넉넉히 받음(반경 2km
+      // 안에서 실제로 15개면 세 단계 다 나오는 걸 확인함).
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'SC4', size: '15' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
       // MT1(대형마트) — 실제로 홈플러스익스프레스/GS더프레시 같은 진짜 근처
       // 대형 슈퍼/마트가 나오는데(확인함), size:1로만 받으면 그게 하필 폐업한
       // 곳이어도 걸러낼 수가 없어서(아래 isOpen 참고) 5개 받아서 그중 골라냄.
@@ -894,8 +895,11 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
     ]);
     // 카카오는 폐업한 곳도 목록에서 안 지우고 이름 끝에 "(폐점)"만 붙여서
     // 그대로 내려줌 — 실제로 "홈플러스 분당오리점 (폐점)"이 대형마트 1등으로
-    // 나오는 걸 확인해서, 모든 카테고리에서 공통으로 걸러냄.
-    function isOpen(d) { return !d.place_name || d.place_name.indexOf('(폐점)') === -1; }
+    // 나오는 걸 확인해서, 모든 카테고리에서 공통으로 걸러냄. 학교는 "신현1중학교
+    // (2028년 3월 예정)"처럼 아직 개교 전인 곳도 같이 나와서 "(예정)"도 걸러냄.
+    function isOpen(d) {
+      return !d.place_name || (d.place_name.indexOf('(폐점)') === -1 && d.place_name.indexOf('예정)') === -1);
+    }
     function pickFirst(res) {
       const docs = res && res.documents;
       if (!docs) return null;
@@ -916,9 +920,15 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
       const match = parkRes.documents.find(function (d) { return isOpen(d) && d.category_name && d.category_name.indexOf('공원') !== -1; });
       if (match) park = { name: match.place_name, dist: parseInt(match.distance, 10) };
     }
-    const school = pickFirstMatching(schoolRes, function (d) { return d.category_name && d.category_name.indexOf('초등학교') !== -1; })
-      || pickFirst(schoolRes);
-    const result = { hospital: hospital, gov: pickFirst(poRes), park: park, school: school, mart: pickFirst(martRes), subway: pickFirst(subwayRes) };
+    // 초/중/고 각각 가장 가까운 곳을 따로 찾음 — 하나만 고르면(예: 초등학교
+    // 우선) 훨씬 가까운 중학교가 있어도 안 보이는 문제가 있어서, 있는 만큼
+    // 전부 배열로 돌려주고 화면에서 줄바꿈으로 다 보여줌.
+    const schools = [];
+    ['초등학교', '중학교', '고등학교'].forEach(function (level) {
+      const found = pickFirstMatching(schoolRes, function (d) { return d.category_name && d.category_name.indexOf(level) !== -1; });
+      if (found) schools.push(found);
+    });
+    const result = { hospital: hospital, gov: pickFirst(poRes), park: park, schools: schools, mart: pickFirst(martRes), subway: pickFirst(subwayRes) };
     await env.DATA.put(cacheKey, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 180 });
     return result;
   } catch (e) {
@@ -939,7 +949,8 @@ async function handleRealEstateSearch(url, env) {
   // v7: 폐업 매장 필터 추가로 캐시된 값이 틀렸을 수 있어 키 변경.
   // v8: 주차대수 지상+지하 합산 버그 수정으로 캐시된 값이 틀렸을 수 있어 키 변경.
   // v9: nearby에 subway(지하철 실거리) 필드 추가로 캐시 키 변경.
-  const cacheKey = 're-search9:' + lawdCd + ':' + budget;
+  // v10: nearby.school -> nearby.schools(배열)로 모양이 바뀌어서 캐시 키 변경.
+  const cacheKey = 're-search10:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
