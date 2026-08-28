@@ -364,7 +364,9 @@
       if (it.kaptInfo.subwayStation) {
         subwayText = (it.kaptInfo.subwayLine || '') + ' ' + it.kaptInfo.subwayStation + '역(' + (it.kaptInfo.subwayWalkTime || '?') + ')';
       }
-      if (it.kaptInfo.busWalkTime) busText = it.kaptInfo.busWalkTime + '이내';
+      // busWalkTime 원본 값 자체에 이미 "이내"가 들어있음(예: "5~10분이내")
+      // — 예전엔 여기서 '이내'를 한 번 더 붙여서 "5~10분이내이내"로 나왔음.
+      if (it.kaptInfo.busWalkTime) busText = it.kaptInfo.busWalkTime;
       if (it.kaptInfo.schools) schoolText = shortSchoolText(it.kaptInfo.schools);
       if (it.kaptInfo.facilities) {
         facilityText = shortFacilityText(it.kaptInfo.facilities);
