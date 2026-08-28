@@ -846,7 +846,8 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
   // 필드들이 없음 -> 키 변경.
   // v4: 폐업한 곳("(폐점)")이 섞여 나오는 걸 거르는 필터를 추가하면서 예전
   // 캐시(re-kakao-dist3)엔 폐업 매장이 그대로 저장돼있을 수 있음 -> 키 변경.
-  const cacheKey = 're-kakao-dist4:' + kaptCode;
+  // v5: 지하철역 실거리(subway) 필드 추가로 캐시 키 변경.
+  const cacheKey = 're-kakao-dist5:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached !== null) return cached === 'null' ? null : JSON.parse(cached);
   if (!addr || !env.KAKAO_API_KEY) return null;
@@ -865,7 +866,7 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
     const nearestParams = function (extra) {
       return new URLSearchParams(Object.assign({ x: x, y: y, radius: '2000', sort: 'distance' }, extra)).toString();
     };
-    const [hpRes, poRes, parkRes, schoolRes, martRes] = await Promise.all([
+    const [hpRes, poRes, parkRes, schoolRes, martRes, subwayRes] = await Promise.all([
       // size:5 — HP8(병원) 카테고리에 동물병원(수의과)도 같이 섞여 나오는 걸
       // 실제로 확인해서(예: "동판교동물병원"이 사람 병원보다 더 가깝게 나옴),
       // 1개만 받으면 걸러낼 여유가 없어 5개 받아서 아래에서 골라냄.
@@ -884,7 +885,12 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
       // MT1(대형마트) — 실제로 홈플러스익스프레스/GS더프레시 같은 진짜 근처
       // 대형 슈퍼/마트가 나오는데(확인함), size:1로만 받으면 그게 하필 폐업한
       // 곳이어도 걸러낼 수가 없어서(아래 isOpen 참고) 5개 받아서 그중 골라냄.
-      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'MT1', size: '5', radius: '3000' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; })
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'MT1', size: '5', radius: '3000' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+      // SW8(지하철역)은 병원/학교보다 훨씬 드문드문 있어서 2000m 반경으론
+      // 자주 0건이 나옴(실제 확인함) — 5000m로 넓혀서 검색. 버스정류장은
+      // 카카오 로컬 API에 아예 데이터 자체가 없음(빈 키워드로 검색해도 0건,
+      // 실제 확인함) — 그래서 버스는 여전히 K-APT 도보시간 텍스트만 씀.
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'SW8', size: '1', radius: '5000' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; })
     ]);
     // 카카오는 폐업한 곳도 목록에서 안 지우고 이름 끝에 "(폐점)"만 붙여서
     // 그대로 내려줌 — 실제로 "홈플러스 분당오리점 (폐점)"이 대형마트 1등으로
@@ -912,7 +918,7 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
     }
     const school = pickFirstMatching(schoolRes, function (d) { return d.category_name && d.category_name.indexOf('초등학교') !== -1; })
       || pickFirst(schoolRes);
-    const result = { hospital: hospital, gov: pickFirst(poRes), park: park, school: school, mart: pickFirst(martRes) };
+    const result = { hospital: hospital, gov: pickFirst(poRes), park: park, school: school, mart: pickFirst(martRes), subway: pickFirst(subwayRes) };
     await env.DATA.put(cacheKey, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 180 });
     return result;
   } catch (e) {
@@ -932,7 +938,8 @@ async function handleRealEstateSearch(url, env) {
   // 6시간 동안 새 필드 없는 결과가 나옴 -> 키 변경.
   // v7: 폐업 매장 필터 추가로 캐시된 값이 틀렸을 수 있어 키 변경.
   // v8: 주차대수 지상+지하 합산 버그 수정으로 캐시된 값이 틀렸을 수 있어 키 변경.
-  const cacheKey = 're-search8:' + lawdCd + ':' + budget;
+  // v9: nearby에 subway(지하철 실거리) 필드 추가로 캐시 키 변경.
+  const cacheKey = 're-search9:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 

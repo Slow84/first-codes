@@ -389,6 +389,9 @@
       parkText = withDist(it.nearby.park, parkText);
       schoolText = withDist(it.nearby.school, schoolText);
       facilityText = withDist(it.nearby.mart, facilityText);
+      subwayText = withDist(it.nearby.subway, subwayText);
+      // 버스는 카카오 로컬 API에 정류장 데이터 자체가 없어서(실제 확인함)
+      // 실거리를 구할 방법이 없음 — K-APT 도보시간 텍스트만 계속 씀.
     }
     return '<tr>' +
       '<td>' + fmtEok(it.dealAmount) + '</td>' +
