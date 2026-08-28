@@ -233,6 +233,11 @@
   }
   citySelect.addEventListener('change', function () { fillDistricts(citySelect.value); });
   citySelect.value = '서울특별시';
+  // citySelect.value를 코드로 지정하는 건 'change' 이벤트를 안 일으켜서
+  // fillDistricts가 자동으로 안 불림 — 그래서 페이지를 처음 열면 구 선택
+  // 상자가 옵션이 하나도 없는 빈 상태(사실상 비활성화처럼 보임)로 남아있던
+  // 버그였음. fillDistricts를 여기서 직접 한 번 불러서 고침.
+  fillDistricts('서울특별시');
   var select = districtSelect; // 아래 search()에서 select.value / select.options를 그대로 씀
   select.value = '11680'; // 기본값: 검색량이 많을 법한 강남구
 
