@@ -797,7 +797,8 @@ async function fetchKaptDetail(env, molitKey, kaptCode) {
   // v2: 버스 도보시간/주차대수/복지시설 필드 추가로 캐시 모양이 바뀌어서
   // 예전 캐시(re-kapt-detail:)를 그대로 읽으면 새 필드가 없는 채로 60일간
   // 나올 수 있음 -> 캐시 키 자체를 바꿔서 새로 받아오게 함.
-  const cacheKey = 're-kapt-detail2:' + kaptCode;
+  // v3: 주차대수가 지상만 세던 버그를 고치면서 값 자체가 바뀌어서 캐시 키 변경.
+  const cacheKey = 're-kapt-detail3:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return cached === 'null' ? null : JSON.parse(cached);
   try {
@@ -810,7 +811,15 @@ async function fetchKaptDetail(env, molitKey, kaptCode) {
       subwayStation: item.subwayStation || null,
       subwayWalkTime: item.kaptdWtimesub || null,
       busWalkTime: item.kaptdWtimebus || null,
-      parkingCount: item.kaptdPcnt || null,
+      // 주차대수는 지상(kaptdPcnt)/지하(kaptdPcntu) 두 필드로 나뉘어 오는데
+      // (실제 응답으로 확인: 노루마을 건영빌라 144세대 = 지상 9대 + 지하 136대),
+      // 지상만 쓰면 "340세대인데 6대"처럼 터무니없이 낮게 보여서 둘을 합침.
+      parkingCount: (function () {
+        const above = parseInt(item.kaptdPcnt, 10) || 0;
+        const under = parseInt(item.kaptdPcntu, 10) || 0;
+        const total = above + under;
+        return total > 0 ? total : null;
+      })(),
       schools: item.educationFacility || null,
       facilities: item.convenientFacility || null,
       welfare: item.welfareFacility || null
@@ -922,7 +931,8 @@ async function handleRealEstateSearch(url, env) {
   // v6: nearby에 학교/대형마트 실거리 필드가 추가돼서 예전 캐시를 그대로 쓰면
   // 6시간 동안 새 필드 없는 결과가 나옴 -> 키 변경.
   // v7: 폐업 매장 필터 추가로 캐시된 값이 틀렸을 수 있어 키 변경.
-  const cacheKey = 're-search7:' + lawdCd + ':' + budget;
+  // v8: 주차대수 지상+지하 합산 버그 수정으로 캐시된 값이 틀렸을 수 있어 키 변경.
+  const cacheKey = 're-search8:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
