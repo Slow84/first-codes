@@ -148,6 +148,7 @@
         <thead><tr>
           <th data-sort="dong">동</th>
           <th data-sort="name" style="text-align:left;">아파트</th>
+          <th data-sort="households">세대수</th>
           <th data-sort="area">전용면적(㎡)</th>
           <th data-sort="floor">층</th>
           <th data-sort="buildYear">준공연도</th>
@@ -236,6 +237,7 @@
       case 'buildYear': return parseInt(it.buildYear, 10) || 0;
       case 'dealAmount': return it.dealAmount || 0;
       case 'dealDate': return it.dealDate || '';
+      case 'households': return it.households || -1; // 세대수 없는 항목은 정렬 시 맨 뒤로
       default: return 0;
     }
   }
@@ -254,6 +256,7 @@
     return '<tr>' +
       '<td>' + it.dong + '</td>' +
       '<td style="text-align:left;"><strong>' + it.name + '</strong></td>' +
+      '<td>' + (it.households ? it.households + '세대' : '—') + '</td>' +
       '<td>' + it.area.toFixed(1) + '</td>' +
       '<td>' + it.floor + '층</td>' +
       '<td>' + it.buildYear + '</td>' +

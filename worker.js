@@ -710,6 +710,76 @@ async function fetchVworldCoord(env, address) {
   }
 }
 
+// 세대수 — 국토교통부_공동주택 단지 목록제공 서비스(AptListService4) +
+// 공동주택 기본 정보제공 서비스(AptBasisInfoServiceV5), 둘 다 실거래가 API와
+// 같은 apis.data.go.kr/1613000 계열이라 같은 서비스키를 그대로 재사용함.
+// 목록 API는 "시군구코드로 바로 검색"하는 getSigunguAptList4가 계속
+// APPLICATION_ERROR를 내서(정부 API 자체 버그로 추정 — sidoCode/bjdCode
+// 버전도 같은 증상), 대신 전체 목록(getTotalAptList4, 22,288건)을 미리
+// 통째로 받아서 지역별로 쪼개 캐시해두는 방식으로 우회함. 이 전체 목록은
+// /api/real-estate-apt-list-refresh(관리자 전용)를 한 번 실행해야 채워지고,
+// 검색 요청 중에는 절대 새로 안 받아옴 — 검색 속도에 영향 없게 하기 위해서.
+const KAPT_LIST_URL = 'https://apis.data.go.kr/1613000/AptListService4/getTotalAptList4';
+const KAPT_BASIS_URL = 'https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusBassInfoV5';
+const KAPT_REGION_PREFIX = 're-kapt-region:';
+
+async function handleRealEstateAptListRefresh(request, env) {
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: '잘못된 요청이에요.' }, 400); }
+  if (!isAdmin(env, (body.admin || '').toString())) return json({ error: '권한이 없어요.' }, 403);
+  if (!env.MOLIT_API_KEY) return json({ error: '서비스키가 설정되지 않았어요.' }, 502);
+
+  const molitKey = env.MOLIT_API_KEY.indexOf('%') !== -1 ? decodeURIComponent(env.MOLIT_API_KEY) : env.MOLIT_API_KEY;
+  const byRegion = {}; // lawdCd(5자리) -> [[kaptName, kaptCode], ...]
+  let page = 1;
+  let total = Infinity;
+  let fetched = 0;
+  try {
+    while (fetched < total && page <= 30) { // 안전장치: 30페이지(3만건) 넘으면 중단
+      const params = new URLSearchParams({ serviceKey: molitKey, numOfRows: '1000', pageNo: String(page) });
+      const r = await fetch(KAPT_LIST_URL + '?' + params.toString());
+      const data = await r.json();
+      const items = data.response && data.response.body && data.response.body.items;
+      if (!items || !items.length) break;
+      total = data.response.body.totalCount || items.length;
+      items.forEach(function (it) {
+        if (!it.bjdCode || !it.kaptCode || !it.kaptName) return;
+        const lawdCd = it.bjdCode.slice(0, 5);
+        if (!byRegion[lawdCd]) byRegion[lawdCd] = [];
+        byRegion[lawdCd].push([it.kaptName, it.kaptCode]);
+      });
+      fetched += items.length;
+      page++;
+    }
+    const regionCodes = Object.keys(byRegion);
+    await Promise.all(regionCodes.map(function (code) {
+      return env.DATA.put(KAPT_REGION_PREFIX + code, JSON.stringify(byRegion[code]), { expirationTtl: 60 * 60 * 24 * 60 }); // 60일 — 새 단지가 자주 생기는 데이터는 아님
+    }));
+    return json({ ok: true, totalFetched: fetched, regions: regionCodes.length });
+  } catch (e) {
+    return json({ error: '단지 목록을 가져오지 못했어요.', detail: fetched }, 502);
+  }
+}
+
+// 단지코드로 세대수 등 기본정보 조회 — kaptCode별로 오래 캐시(세대수는 거의
+// 안 바뀜).
+async function fetchKaptBasis(env, molitKey, kaptCode) {
+  const cacheKey = 're-kapt-basis:' + kaptCode;
+  const cached = await env.DATA.get(cacheKey);
+  if (cached) return cached === 'null' ? null : JSON.parse(cached);
+  try {
+    const params = new URLSearchParams({ serviceKey: molitKey, kaptCode: kaptCode });
+    const r = await fetch(KAPT_BASIS_URL + '?' + params.toString());
+    const data = await r.json();
+    const item = data.response && data.response.body && data.response.body.item;
+    const households = item && item.kaptdaCnt ? parseInt(item.kaptdaCnt, 10) : null;
+    await env.DATA.put(cacheKey, households != null ? String(households) : 'null', { expirationTtl: 60 * 60 * 24 * 60 });
+    return households;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function handleRealEstateSearch(url, env) {
   if (!env.MOLIT_API_KEY) return json({ error: '실거래가 조회 기능이 아직 설정되지 않았어요.' }, 502);
   const lawdCd = (url.searchParams.get('lawdCd') || '').trim();
@@ -767,6 +837,24 @@ async function handleRealEstateSearch(url, env) {
         const coord = await fetchVworldCoord(env, address);
         it.subway = coord ? nearestSubway(coord.lat, coord.lng) : null;
       }
+    }
+
+    // 세대수 — /api/real-estate-apt-list-refresh로 미리 채워둔 지역별 단지
+    // 목록(KV, 검색 중엔 새로 안 받아옴)에서 이름으로 매칭해서 단지코드를 찾고,
+    // 그 코드로 세대수를 조회함. 목록 캐시가 아직 없는 지역이면 그냥 조용히
+    // 건너뜀(households: null) — 검색 자체가 실패하면 안 되니까.
+    const HOUSEHOLDS_LIMIT = 35; // MOLIT 3건 + 이 값 <= 50 (Cloudflare Worker 요청당 subrequest 한도)
+    const kaptListRaw = await env.DATA.get(KAPT_REGION_PREFIX + lawdCd);
+    if (kaptListRaw && env.MOLIT_API_KEY) {
+      const kaptList = JSON.parse(kaptListRaw); // [[kaptName, kaptCode], ...]
+      const kaptByName = {};
+      kaptList.forEach(function (pair) { if (!(pair[0] in kaptByName)) kaptByName[pair[0]] = pair[1]; });
+      const molitKeyForKapt = env.MOLIT_API_KEY.indexOf('%') !== -1 ? decodeURIComponent(env.MOLIT_API_KEY) : env.MOLIT_API_KEY;
+      await Promise.all(items.slice(0, HOUSEHOLDS_LIMIT).map(async function (it) {
+        const cleanName = it.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
+        const kaptCode = kaptByName[cleanName] || kaptByName[it.name];
+        it.households = kaptCode ? await fetchKaptBasis(env, molitKeyForKapt, kaptCode) : null;
+      }));
     }
 
     const text = JSON.stringify({ items: items, months: months });
@@ -1068,6 +1156,11 @@ export default {
 
     if (url.pathname === '/api/real-estate-search') {
       if (request.method === 'GET') return handleRealEstateSearch(url, env);
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    if (url.pathname === '/api/real-estate-apt-list-refresh') {
+      if (request.method === 'POST') return handleRealEstateAptListRefresh(request, env);
       return new Response('Method not allowed', { status: 405 });
     }
 
