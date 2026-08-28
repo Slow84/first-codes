@@ -721,6 +721,11 @@ async function fetchVworldCoord(env, address) {
 // 검색 요청 중에는 절대 새로 안 받아옴 — 검색 속도에 영향 없게 하기 위해서.
 const KAPT_LIST_URL = 'https://apis.data.go.kr/1613000/AptListService4/getTotalAptList4';
 const KAPT_BASIS_URL = 'https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusBassInfoV5';
+// 2026-08-28 확인: 같은 서비스의 "상세정보"(getAphusDtlInfoV5)에 지하철역·
+// 도보시간·인근 학교·편의시설이 이미 통째로 들어있음 — 그래서 VWorld
+// 지오코딩(막힘)이나 K-APT 목록 재매칭 없이, 세대수랑 똑같은 kaptCode로
+// 이 엔드포인트만 하나 더 부르면 역세권/초품아/상권이 한 번에 해결됨.
+const KAPT_DETAIL_URL = 'https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusDtlInfoV5';
 const KAPT_REGION_PREFIX = 're-kapt-region:';
 
 async function handleRealEstateAptListRefresh(request, env) {
@@ -775,6 +780,31 @@ async function fetchKaptBasis(env, molitKey, kaptCode) {
     const households = item && item.kaptdaCnt ? parseInt(item.kaptdaCnt, 10) : null;
     await env.DATA.put(cacheKey, households != null ? String(households) : 'null', { expirationTtl: 60 * 60 * 24 * 60 });
     return households;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 단지코드로 지하철역·도보시간·인근 학교·편의시설 조회 — 이것도 거의 안
+// 바뀌는 값이라 오래 캐시.
+async function fetchKaptDetail(env, molitKey, kaptCode) {
+  const cacheKey = 're-kapt-detail:' + kaptCode;
+  const cached = await env.DATA.get(cacheKey);
+  if (cached) return cached === 'null' ? null : JSON.parse(cached);
+  try {
+    const params = new URLSearchParams({ serviceKey: molitKey, kaptCode: kaptCode });
+    const r = await fetch(KAPT_DETAIL_URL + '?' + params.toString());
+    const data = await r.json();
+    const item = data.response && data.response.body && data.response.body.item;
+    const detail = item ? {
+      subwayLine: item.subwayLine || null,
+      subwayStation: item.subwayStation || null,
+      subwayWalkTime: item.kaptdWtimesub || null,
+      schools: item.educationFacility || null,
+      facilities: item.convenientFacility || null
+    } : null;
+    await env.DATA.put(cacheKey, detail ? JSON.stringify(detail) : 'null', { expirationTtl: 60 * 60 * 24 * 60 });
+    return detail;
   } catch (e) {
     return null;
   }
@@ -839,11 +869,13 @@ async function handleRealEstateSearch(url, env) {
       }
     }
 
-    // 세대수 — /api/real-estate-apt-list-refresh로 미리 채워둔 지역별 단지
-    // 목록(KV, 검색 중엔 새로 안 받아옴)에서 이름으로 매칭해서 단지코드를 찾고,
-    // 그 코드로 세대수를 조회함. 목록 캐시가 아직 없는 지역이면 그냥 조용히
-    // 건너뜀(households: null) — 검색 자체가 실패하면 안 되니까.
-    const HOUSEHOLDS_LIMIT = 35; // MOLIT 3건 + 이 값 <= 50 (Cloudflare Worker 요청당 subrequest 한도)
+    // 세대수 + 역세권/초품아/상권 — /api/real-estate-apt-list-refresh로 미리
+    // 채워둔 지역별 단지 목록(KV, 검색 중엔 새로 안 받아옴)에서 이름으로
+    // 매칭해서 단지코드를 찾고, 그 코드로 기본정보(세대수)와 상세정보
+    // (지하철역·도보시간·인근학교·편의시설)를 같이 조회함 — 둘 다 같은
+    // kaptCode를 쓰므로 한 번만 매칭하면 됨. 목록 캐시가 아직 없는 지역이면
+    // 그냥 조용히 건너뜀(모든 값 null) — 검색 자체가 실패하면 안 되니까.
+    const KAPT_LOOKUP_LIMIT = 20; // MOLIT 3건 + (기본정보+상세정보) 2*20=40 <= 50 (Cloudflare Worker 요청당 subrequest 한도)
     const kaptListRaw = await env.DATA.get(KAPT_REGION_PREFIX + lawdCd);
     if (kaptListRaw && env.MOLIT_API_KEY) {
       const kaptList = JSON.parse(kaptListRaw); // [[kaptName, kaptCode], ...]
@@ -857,10 +889,16 @@ async function handleRealEstateSearch(url, env) {
         if (!(noSpace in kaptByNameNoSpace)) kaptByNameNoSpace[noSpace] = pair[1];
       });
       const molitKeyForKapt = env.MOLIT_API_KEY.indexOf('%') !== -1 ? decodeURIComponent(env.MOLIT_API_KEY) : env.MOLIT_API_KEY;
-      await Promise.all(items.slice(0, HOUSEHOLDS_LIMIT).map(async function (it) {
+      await Promise.all(items.slice(0, KAPT_LOOKUP_LIMIT).map(async function (it) {
         const cleanName = it.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
         const kaptCode = kaptByName[cleanName] || kaptByName[it.name] || kaptByNameNoSpace[cleanName.replace(/\s+/g, '')];
-        it.households = kaptCode ? await fetchKaptBasis(env, molitKeyForKapt, kaptCode) : null;
+        if (!kaptCode) { it.households = null; it.kaptInfo = null; return; }
+        const [households, detail] = await Promise.all([
+          fetchKaptBasis(env, molitKeyForKapt, kaptCode),
+          fetchKaptDetail(env, molitKeyForKapt, kaptCode)
+        ]);
+        it.households = households;
+        it.kaptInfo = detail;
       }));
     }
 
