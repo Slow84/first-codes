@@ -151,6 +151,7 @@
     <div class="table-wrap" style="margin-top:12px;">
       <table class="data-table" id="resultTable" style="display:none;">
         <thead><tr>
+          <th data-sort="dealAmount">거래가</th>
           <th data-sort="dong">동</th>
           <th data-sort="name" style="text-align:left;">아파트</th>
           <th data-sort="households">세대수</th>
@@ -158,7 +159,6 @@
           <th data-sort="area">전용면적(㎡)</th>
           <th data-sort="floor">층</th>
           <th data-sort="buildYear">준공연도</th>
-          <th data-sort="dealAmount">거래가</th>
           <th data-sort="dealDate">거래일</th>
           <th>역세권</th>
           <th>버스</th>
@@ -354,6 +354,7 @@
       if (it.kaptInfo.welfare) welfareText = shortAllText(it.kaptInfo.welfare, 2);
     }
     return '<tr>' +
+      '<td>' + fmtEok(it.dealAmount) + '</td>' +
       '<td>' + it.dong + '</td>' +
       '<td style="text-align:left;"><strong>' + it.name + '</strong></td>' +
       '<td>' + (it.households ? it.households + '세대' : '—') + '</td>' +
@@ -361,7 +362,6 @@
       '<td>' + it.area.toFixed(1) + '</td>' +
       '<td>' + it.floor + '층</td>' +
       '<td>' + it.buildYear + '</td>' +
-      '<td>' + fmtEok(it.dealAmount) + '</td>' +
       '<td>' + it.dealDate + '</td>' +
       '<td>' + subwayText + '</td>' +
       '<td>' + busText + '</td>' +
