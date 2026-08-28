@@ -122,7 +122,7 @@
 
     <div class="callout" style="margin-top: 20px;">
       <strong>ℹ 참고</strong>
-역세권·인근 학교·인근 상권 정보는 국토교통부 공동주택 정보(K-APT)에 등록된 단지에 한해 나와요 — 상위 20건까지만 조회돼요. 대출한도(LTV·DSR) 계산은 아직 준비 중이에요. 위치는 별도 API 없이, 결과 각 줄의 "네이버지도에서 보기" 링크로 확인해요.
+역세권·인근 학교·인근 상권 정보는 국토교통부 공동주택 정보(K-APT)에 등록된 단지에 한해 나와요 — 상위 20건까지만 조회되고, 실제 거리(m)는 이 데이터에 없어서 대표 시설 이름만 표시돼요. 대출한도(LTV·DSR) 계산은 아직 준비 중이에요. 위치는 별도 API 없이, 결과 각 줄의 "네이버지도에서 보기" 링크로 확인해요.
     </div>
 
     <div class="chart-card" style="margin-top: 28px; max-width: 560px; padding: 24px;">
@@ -262,22 +262,49 @@
     }
   }
 
+  // K-APT의 educationFacility/convenientFacility는 "초등학교(신백현초등학교)
+  // 중학교(신백현중학교)"처럼 카테고리(이름) 나열 텍스트만 줄 뿐, 실제 떨어진
+  // 거리(미터)는 이 API에 아예 없는 값이라 만들어낼 수 없음 — 대신 이름을
+  // 짧게 줄여서 표를 깔끔하게 만듦.
+  function abbrevSchool(name) {
+    return name.replace(/초등학교$/, '초').replace(/중학교$/, '중').replace(/고등학교$/, '고');
+  }
+  function pickCategory(text, categories) {
+    for (var i = 0; i < categories.length; i++) {
+      var m = text.match(new RegExp(categories[i] + '\\(([^)]+)\\)'));
+      if (m && m[1].trim()) return m[1].trim();
+    }
+    return null;
+  }
+  function shortSchoolText(raw) {
+    var name = pickCategory(raw, ['초등학교', '중학교']);
+    if (!name) return '—';
+    // "신백현초등학교, 신백현중학교"처럼 콤마로 여러 개 나열된 경우 첫 번째만
+    var first = name.split(/[,，]/)[0].trim();
+    return abbrevSchool(first);
+  }
+  function shortFacilityText(raw) {
+    // "상권" 취지에 맞게 상업시설을 관공서/병원보다 우선해서 대표 하나만 표기
+    var name = pickCategory(raw, ['백화점', '대형상가', '대형마트', '관공서', '병원', '공원', '기타']);
+    if (!name) return '—';
+    return name.split(/[,，]/)[0].trim();
+  }
+
   function renderRow(it) {
     // 국토부 원본 데이터의 아파트명에 "청담2차이-편한세상(201동,202동,203동)"처럼
     // 동번호가 괄호로 붙어있는 경우가 있어서, 검색어에서는 그 괄호 부분을 빼야
     // 정상적으로 찾음(괄호 안 "동,동,동" 나열은 실제 주소/이름이 아님).
     var searchName = it.name.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
     var mapUrl = 'https://map.naver.com/p/search/' + encodeURIComponent(searchName + ' ' + it.dong);
-    var wrapStyle = 'style="white-space:normal; max-width:180px; font-size:12.5px;"';
     var subwayText = '—';
     var schoolText = '—';
     var facilityText = '—';
     if (it.kaptInfo) {
       if (it.kaptInfo.subwayStation) {
-        subwayText = '<span class="cell-warn">' + (it.kaptInfo.subwayLine || '') + ' ' + it.kaptInfo.subwayStation + '역</span> <span class="cell-muted" style="font-size:11.5px;">(도보 ' + (it.kaptInfo.subwayWalkTime || '?') + ')</span>';
+        subwayText = (it.kaptInfo.subwayLine || '') + ' ' + it.kaptInfo.subwayStation + '역(' + (it.kaptInfo.subwayWalkTime || '?') + ')';
       }
-      if (it.kaptInfo.schools) schoolText = '<span ' + wrapStyle + '>' + it.kaptInfo.schools + '</span>';
-      if (it.kaptInfo.facilities) facilityText = '<span ' + wrapStyle + '>' + it.kaptInfo.facilities + '</span>';
+      if (it.kaptInfo.schools) schoolText = shortSchoolText(it.kaptInfo.schools);
+      if (it.kaptInfo.facilities) facilityText = shortFacilityText(it.kaptInfo.facilities);
     }
     return '<tr>' +
       '<td>' + it.dong + '</td>' +
