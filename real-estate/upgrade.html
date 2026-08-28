@@ -302,26 +302,20 @@
     if (!name) return '—';
     return name.split(/[,，]/)[0].trim();
   }
-  // 복지시설(welfareFacility)은 educationFacility/convenientFacility와 달리
-  // "카테고리(값)" 괄호 형식이 아니라 "관리사무소, 노인정, 보육시설"처럼
-  // 그냥 쉼표로 나열된 텍스트로 옴(실제 API 응답으로 직접 확인함) — 두 형식
-  // 다 지원하도록 괄호가 있으면 괄호 안 값을, 없으면 쉼표로 나눈 값을 씀.
+  // 복지시설(welfareFacility)은 "관리사무소, 노인정, 보육시설"처럼 쉼표로
+  // 나열된 텍스트로 오는데(괄호 형식 아님, 실제 API 응답으로 확인함), 실제
+  // 여러 단지를 찍어보니 "관리사무소"와 "노인정"은 사실상 모든 단지에
+  // 다 있어서(분당/강남 표본에서 100% 동일) 그대로 보여주면 매번 똑같은
+  // 값만 보여서 비교에 의미가 없었음 — 이 두 개는 빼고, 단지마다 실제로
+  // 다른(있고 없고가 갈리는) 시설만 골라서 보여줌.
+  var WELFARE_BASELINE = ['관리사무소', '노인정'];
   function shortAllText(raw, limit) {
     if (!raw) return '—';
-    var matches = raw.match(/\(([^)]+)\)/g);
-    var vals;
-    if (matches && matches.length) {
-      vals = [];
-      for (var i = 0; i < matches.length; i++) {
-        var v = matches[i].slice(1, -1).trim();
-        if (v) vals.push(v.split(/[,，]/)[0].trim());
-      }
-    } else {
-      vals = raw.split(/[,，]/).map(function (s) { return s.trim(); }).filter(Boolean);
-    }
-    if (!vals.length) return '—';
-    var shown = vals.slice(0, limit || 2);
-    return shown.join(', ') + (vals.length > shown.length ? ' 외' : '');
+    var vals = raw.split(/[,，]/).map(function (s) { return s.trim(); }).filter(Boolean);
+    var notable = vals.filter(function (v) { return WELFARE_BASELINE.indexOf(v) === -1; });
+    if (!notable.length) return vals.length ? '기본시설만' : '—';
+    var shown = notable.slice(0, limit || 3);
+    return shown.join(', ') + (notable.length > shown.length ? ' 외' : '');
   }
 
   function renderRow(it) {
