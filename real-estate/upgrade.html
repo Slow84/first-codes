@@ -146,6 +146,28 @@
       <button type="button" id="searchBtn" class="pill-btn accent" style="width:100%; padding:12px; justify-content:center;">이 예산으로 아파트 찾기</button>
     </div>
 
+    <div class="chart-card" style="margin-top: 16px; max-width: 560px; padding: 24px;">
+      <h4 style="margin:0 0 4px; font-size:15px; font-weight:700; color:var(--text);">대출한도(LTV) 계산기</h4>
+      <p style="font-size:12.5px; color:var(--text-muted); margin:0 0 16px;">위에서 고른 지역이 규제지역인지 자동으로 판단해서, 집값 대비 최대 대출 가능액을 추정해요. <strong>실제 한도는 개인 신용도·소득·은행 정책에 따라 달라질 수 있어요</strong> — 참고용이에요.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:16px; margin-bottom:16px;">
+        <label style="flex:1; min-width:140px; font-size:13px; font-weight:600; color:var(--text-muted);">주택 가격(억원)
+          <input type="number" id="ltvPriceInput" min="0" step="0.1" value="0" class="comment-field" style="margin-top:6px;">
+        </label>
+        <label style="flex:1; min-width:140px; font-size:13px; font-weight:600; color:var(--text-muted);">보유 주택 수
+          <select id="ltvOwnSelect" class="comment-field" style="margin-top:6px; text-align:center; text-align-last:center;">
+            <option value="0">무주택자</option>
+            <option value="1">1주택자</option>
+            <option value="2">다주택자(2주택 이상)</option>
+          </select>
+        </label>
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--text-muted); margin-bottom:16px;">
+        <input type="checkbox" id="ltvFirstCheck" style="width:16px; height:16px;"> 생애최초 구매예요
+      </label>
+      <button type="button" id="ltvBtn" class="pill-btn accent" style="width:100%; padding:12px; justify-content:center;">대출한도 계산하기</button>
+      <div id="ltvResult" style="margin-top:16px; font-size:13.5px;"></div>
+    </div>
+
     <div id="searchStatus" style="margin-top:20px; font-size:14px; color:var(--text-muted);"></div>
     <p style="margin:6px 0 0; font-size:12.5px; color:var(--text-muted);">→ 표가 넓어서 옆으로 밀어야 다 보여요. "거래가" 칸은 계속 고정돼요.</p>
 
@@ -273,6 +295,64 @@
   fillDistricts('서울특별시');
   var select = districtSelect; // 아래 search()에서 select.value / select.options를 그대로 씀
   select.value = '11680'; // 기본값: 검색량이 많을 법한 강남구
+
+  // 규제지역(투기과열지구·조정대상지역) 목록 — 2025-10-15 "주택시장 안정화
+  // 대책" 발표 기준(정책브리핑 korea.kr에서 직접 확인, 2026-08-29): 서울
+  // 25개구 전체 + 경기 12곳. 위 REGION_TREE의 구/군 코드를 그대로 재사용해서
+  // "규제지역인지"를 판단함 — 지역 목록을 페이지 안에 또 만들지 않기 위해서.
+  // 정부가 규제지역을 다시 바꾸면 이 목록도 다시 확인해야 함(자주 바뀌는 정책).
+  var REGULATED_CODES = {};
+  REGION_TREE['서울특별시'].forEach(function (r) { REGULATED_CODES[r[0]] = true; });
+  ['41290', '41210', '41131', '41133', '41135', '41117', '41111', '41115', '41173', '41465', '41430', '41450']
+    .forEach(function (c) { REGULATED_CODES[c] = true; });
+
+  // LTV(주택담보인정비율) 추정 계산 — 2026-08-29 시점 규정 기준.
+  // 무주택/1주택자: 규제지역 40%, 비규제지역 70%. 규제지역엔 집값 구간별
+  // 절대 한도(15억 이하 6억 / 15~25억 4억 / 25억 초과 2억)가 비율 계산과
+  // 별도로 또 걸려서, 둘 중 더 낮은 쪽이 실제 한도가 됨. 다주택자는 규제지역
+  // 내 신규 주담대가 원칙적으로 막혀 있음. 생애최초는 정책대출(디딤돌 등)
+  // 기준 70%까지 가능하지만, 그 상품들은 집값/소득 조건이 또 따로 있어서
+  // 이 계산기는 "정책대출을 받을 수 있다는 가정 하의 상한선"만 보여줌.
+  function calcLtv(price, lawdCd, ownCount, isFirst) {
+    var regulated = !!REGULATED_CODES[lawdCd];
+    if (regulated && ownCount >= 2) {
+      return { regulated: true, blocked: true };
+    }
+    var ratio = regulated ? 0.4 : 0.7;
+    if (isFirst) ratio = 0.7;
+    var maxByRatio = price * ratio;
+    var maxByTier = Infinity;
+    if (regulated && !isFirst) {
+      maxByTier = price <= 15 ? 6 : price <= 25 ? 4 : 2;
+    }
+    var maxLoan = Math.max(0, Math.min(maxByRatio, maxByTier));
+    return { regulated: regulated, blocked: false, ratio: ratio, maxLoan: maxLoan, ownFunds: price - maxLoan };
+  }
+
+  document.getElementById('ltvBtn').addEventListener('click', function () {
+    var price = parseFloat(document.getElementById('ltvPriceInput').value) || 0;
+    var ownCount = parseInt(document.getElementById('ltvOwnSelect').value, 10);
+    var isFirst = document.getElementById('ltvFirstCheck').checked;
+    var out = document.getElementById('ltvResult');
+    if (price <= 0) {
+      out.innerHTML = '<span style="color:var(--text-muted);">주택 가격을 먼저 입력해주세요.</span>';
+      return;
+    }
+    var lawdCd = select.value;
+    var regionLabel = citySelect.value + ' ' + select.options[select.selectedIndex].text;
+    var r = calcLtv(price, lawdCd, ownCount, isFirst);
+    if (r.blocked) {
+      out.innerHTML = '<div class="callout" style="margin:0;"><strong>' + regionLabel + '은(는) 규제지역이에요.</strong><br>규제지역에서 다주택자는 원칙적으로 신규 주택담보대출이 막혀있어요. 기존 주택 처분 조건부 예외 등은 은행에 직접 문의해보세요.</div>';
+      return;
+    }
+    out.innerHTML =
+      '<div class="callout" style="margin:0;">' +
+      '<strong>' + regionLabel + '</strong> — ' + (r.regulated ? '규제지역' : '비규제지역') + (isFirst ? ' · 생애최초' : '') + '<br>' +
+      '적용 LTV: <strong>' + Math.round(r.ratio * 100) + '%</strong><br>' +
+      '예상 최대 대출액: <strong style="color:var(--accent);">' + fmtEok(r.maxLoan * 10000) + '</strong><br>' +
+      '최소 필요 자기자금: <strong>' + fmtEok(r.ownFunds * 10000) + '</strong>' +
+      '</div>';
+  });
 
   function fmtEok(manwon) {
     return (manwon / 10000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + '억';
