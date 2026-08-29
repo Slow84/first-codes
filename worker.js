@@ -840,8 +840,13 @@ async function fetchKaptDetail(env, molitKey, kaptCode) {
 const KAKAO_ADDRESS_URL = 'https://dapi.kakao.com/v2/local/search/address.json';
 const KAKAO_CATEGORY_URL = 'https://dapi.kakao.com/v2/local/search/category.json';
 const KAKAO_KEYWORD_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
+// 국토교통부_(TAGO)_버스정류소정보 — 카카오 로컬 API엔 버스정류장 데이터 자체가
+// 없어서(2026-08-28 확인) 대신 씀. 좌표만 주고 거리는 안 줘서 haversineDistanceM로
+// 직접 계산함(자동승인 API라 별도 심사 없이 바로 됨, MOLIT_API_KEY와 같은 계정
+// 인증키로 됨 — data.go.kr은 API별이 아니라 계정별로 인증키를 하나만 줌).
+const TAGO_BUS_STOP_URL = 'http://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList';
 
-async function fetchKakaoDistance(env, kaptCode, addr) {
+async function fetchKakaoDistance(env, kaptCode, addr, molitKey) {
   // v3: 학교/대형마트 실거리 필드가 추가돼서 예전 캐시(re-kakao-dist2)엔 이
   // 필드들이 없음 -> 키 변경.
   // v4: 폐업한 곳("(폐점)")이 섞여 나오는 걸 거르는 필터를 추가하면서 예전
@@ -849,7 +854,8 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
   // v5: 지하철역 실거리(subway) 필드 추가로 캐시 키 변경.
   // v6: school(단일)이 schools(배열, 초/중/고 각각)로 바뀌어서 캐시 키 변경.
   // v7: 개교 예정 학교(planned 필드) 추가로 캐시 키 변경.
-  const cacheKey = 're-kakao-dist7:' + kaptCode;
+  // v8: 버스정류장 실거리(bus, TAGO API) 필드 추가로 캐시 키 변경.
+  const cacheKey = 're-kakao-dist8:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached !== null) return cached === 'null' ? null : JSON.parse(cached);
   if (!addr || !env.KAKAO_API_KEY) return null;
@@ -868,7 +874,7 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
     const nearestParams = function (extra) {
       return new URLSearchParams(Object.assign({ x: x, y: y, radius: '2000', sort: 'distance' }, extra)).toString();
     };
-    const [hpRes, poRes, parkRes, schoolRes, martRes, subwayRes] = await Promise.all([
+    const [hpRes, poRes, parkRes, schoolRes, martRes, subwayRes, busRes] = await Promise.all([
       // size:5 — HP8(병원) 카테고리에 동물병원(수의과)도 같이 섞여 나오는 걸
       // 실제로 확인해서(예: "동판교동물병원"이 사람 병원보다 더 가깝게 나옴),
       // 1개만 받으면 걸러낼 여유가 없어 5개 받아서 아래에서 골라냄.
@@ -889,10 +895,12 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
       // 곳이어도 걸러낼 수가 없어서(아래 isOpen 참고) 5개 받아서 그중 골라냄.
       fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'MT1', size: '5', radius: '3000' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
       // SW8(지하철역)은 병원/학교보다 훨씬 드문드문 있어서 2000m 반경으론
-      // 자주 0건이 나옴(실제 확인함) — 5000m로 넓혀서 검색. 버스정류장은
-      // 카카오 로컬 API에 아예 데이터 자체가 없음(빈 키워드로 검색해도 0건,
-      // 실제 확인함) — 그래서 버스는 여전히 K-APT 도보시간 텍스트만 씀.
-      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'SW8', size: '1', radius: '5000' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; })
+      // 자주 0건이 나옴(실제 확인함) — 5000m로 넓혀서 검색.
+      fetch(KAKAO_CATEGORY_URL + '?' + nearestParams({ category_group_code: 'SW8', size: '1', radius: '5000' }), { headers }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+      // 버스정류장은 카카오 로컬 API에 데이터 자체가 없어서(확인함) TAGO
+      // (국토교통부 국가대중교통정보센터) API로 대체 — MOLIT_API_KEY가 없으면
+      // 건너뜀(그래도 다른 항목은 정상 계산됨).
+      molitKey ? fetch(TAGO_BUS_STOP_URL + '?' + new URLSearchParams({ serviceKey: molitKey, gpsLati: y, gpsLong: x, _type: 'json', numOfRows: '5' })).then(function (r) { return r.json(); }).catch(function () { return null; }) : Promise.resolve(null)
     ]);
     // 카카오는 폐업한 곳도 목록에서 안 지우고 이름 끝에 "(폐점)"만 붙여서
     // 그대로 내려줌 — 실제로 "홈플러스 분당오리점 (폐점)"이 대형마트 1등으로
@@ -948,7 +956,21 @@ async function fetchKakaoDistance(env, kaptCode, addr) {
         });
       }
     });
-    const result = { hospital: hospital, gov: pickFirst(poRes), park: park, schools: schools, mart: pickFirst(martRes), subway: pickFirst(subwayRes) };
+    // TAGO 정류소 API는 거리를 안 주고 좌표만 줘서(확인함) haversine으로 직접
+    // 계산 — 응답이 항상 거리순 정렬이라는 보장이 없어서 받은 것 중 최솟값을 찾음.
+    let bus = null;
+    const busItems = busRes && busRes.response && busRes.response.body && busRes.response.body.items && busRes.response.body.items.item;
+    if (busItems) {
+      const list = Array.isArray(busItems) ? busItems : [busItems];
+      let best = null;
+      list.forEach(function (s) {
+        if (s.gpslati == null || s.gpslong == null) return;
+        const d = haversineDistanceM(parseFloat(y), parseFloat(x), s.gpslati, s.gpslong);
+        if (!best || d < best.dist) best = { name: s.nodenm, dist: Math.round(d) };
+      });
+      bus = best;
+    }
+    const result = { hospital: hospital, gov: pickFirst(poRes), park: park, schools: schools, mart: pickFirst(martRes), subway: pickFirst(subwayRes), bus: bus };
     await env.DATA.put(cacheKey, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 180 });
     return result;
   } catch (e) {
@@ -971,7 +993,8 @@ async function handleRealEstateSearch(url, env) {
   // v9: nearby에 subway(지하철 실거리) 필드 추가로 캐시 키 변경.
   // v10: nearby.school -> nearby.schools(배열)로 모양이 바뀌어서 캐시 키 변경.
   // v11: nearby.schools에 planned(개교 예정) 필드 추가로 캐시 키 변경.
-  const cacheKey = 're-search11:' + lawdCd + ':' + budget;
+  // v12: nearby.bus(버스정류장 실거리) 필드 추가로 캐시 키 변경.
+  const cacheKey = 're-search12:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -1079,7 +1102,7 @@ async function handleRealEstateSearch(url, env) {
       if (env.KAKAO_API_KEY) {
         const candidates = items.filter(function (it) { return it._kaptCode && it._addr; });
         await Promise.all(candidates.map(async function (it) {
-          it.nearby = await fetchKakaoDistance(env, it._kaptCode, it._addr);
+          it.nearby = await fetchKakaoDistance(env, it._kaptCode, it._addr, molitKeyForKapt);
         }));
       }
       items.forEach(function (it) { delete it._kaptCode; delete it._addr; });

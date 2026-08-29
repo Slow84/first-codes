@@ -413,8 +413,9 @@
       }
       facilityText = withDist(it.nearby.mart, facilityText);
       subwayText = withDist(it.nearby.subway, subwayText);
-      // 버스는 카카오 로컬 API에 정류장 데이터 자체가 없어서(실제 확인함)
-      // 실거리를 구할 방법이 없음 — K-APT 도보시간 텍스트만 계속 씀.
+      // 버스는 카카오 로컬 API엔 정류장 데이터가 없어서(확인함) 대신 TAGO
+      // (국토교통부 국가대중교통정보센터) API로 실거리를 구함.
+      busText = withDist(it.nearby.bus, busText);
     }
     return '<tr>' +
       '<td>' + fmtEok(it.dealAmount) + '</td>' +
