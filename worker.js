@@ -994,7 +994,9 @@ async function handleRealEstateSearch(url, env) {
   // v10: nearby.school -> nearby.schools(배열)로 모양이 바뀌어서 캐시 키 변경.
   // v11: nearby.schools에 planned(개교 예정) 필드 추가로 캐시 키 변경.
   // v12: nearby.bus(버스정류장 실거리) 필드 추가로 캐시 키 변경.
-  const cacheKey = 're-search12:' + lawdCd + ':' + budget;
+  // v13: 이름 매칭 로직 개선(괄호 안 내용 붙여쓰기/아파트 접미사/포함매칭)으로
+  // 매칭 결과 자체가 바뀌어서 캐시 키 변경.
+  const cacheKey = 're-search13:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -1064,27 +1066,74 @@ async function handleRealEstateSearch(url, env) {
       const kaptByNameNoSpace = {}; // 국토부 실거래가 이름과 K-APT 등록명 사이에 띄어쓰기 차이가 있는
       // 경우가 많아서("래미안 개포 루체하임" vs "래미안개포루체하임") 공백 제거
       // 버전으로도 한 번 더 매칭 시도함.
+      const kaptListNoSpace = []; // [[공백 제거된 K-APT 이름, kaptCode], ...] — findFuzzy가 씀
       kaptList.forEach(function (pair) {
         if (!(pair[0] in kaptByName)) kaptByName[pair[0]] = pair[1];
         const noSpace = pair[0].replace(/\s+/g, '');
         if (!(noSpace in kaptByNameNoSpace)) kaptByNameNoSpace[noSpace] = pair[1];
+        kaptListNoSpace.push([noSpace, pair[1]]);
       });
-      // 마지막 보정: 판교/정자/이매 같은 동네 이름이 K-APT 등록명 앞에 붙어있는
-      // 경우가 많아서("백현마을8단지(대림)" -> K-APT엔 "판교백현마을8단지")
-      // 정확히 일치/공백제거로도 못 찾으면, "K-APT 이름이 우리 이름으로 끝나는지"
-      // 를 마지막으로 한 번 더 찾아봄(찾으면 첫 매치 사용).
-      function findByEndsWith(name) {
-        if (!name) return null;
-        for (var i = 0; i < kaptList.length; i++) {
-          if (kaptList[i][0].endsWith(name)) return kaptList[i][1];
+      // 2026-08-30: 이름 매칭 실패율을 실제로 세어보니(분당구 표본) 50건 중
+      // 35건이 매칭 실패였음 — 아래 세 가지 패턴이 원인이었음(전부 실제
+      // K-APT 데이터로 확인함):
+      //  ① "이매촌(동신9)" -> K-APT엔 "이매촌동신9단지"(괄호 없이 붙여쓰고
+      //     "단지"까지 붙음). 기존 코드는 괄호 안 내용을 통째로 버려서
+      //     "이매촌"만 남았는데, 그 이름 단독으로는 K-APT에 없음.
+      //  ② "봇들마을3단지(주공)" -> K-APT엔 "봇들마을3단지아파트"("아파트"
+      //     접미사가 붙음). "주공"을 버린 "봇들마을3단지"까지만 있으면
+      //     기존 endsWith(우리이름)로는 못 찾음(K-APT 이름이 "아파트"로
+      //     끝나지 우리 이름으로 끝나는 게 아니라서).
+      //  ③ "시범삼성" -> K-APT엔 "분당시범삼성한신아파트"(우리 이름이 맨
+      //     앞이 아니라 중간에 껴있음). 기존 endsWith로는 "맨 뒤에 있을
+      //     때"만 잡히고 "중간에 있을 때"는 못 잡음.
+      // 그래서: (a) 괄호 안 내용을 버리지 않고 붙여쓴 버전도 후보로 추가하고,
+      // (b) "이름+아파트"로 끝나는지, (c) K-APT 이름 안에 우리 이름이 그냥
+      // 포함(중간이든 끝이든)돼있는지까지 확인함. ③번 포함(contains) 방식은
+      // 이름이 너무 짧으면(1~2글자) 엉뚱한 곳과 우연히 겹칠 위험이 있어서
+      // 3글자 이상일 때만 씀 — 그래도 오매칭 가능성이 완전히 0은 아님(기존
+      // endsWith 방식도 같은 종류의 위험을 이미 안고 있던 것과 마찬가지).
+      function findFuzzy(name) {
+        // K-APT 이름 쪽 공백이 들쭉날쭉해서("양지마을 금호 1단지 아파트")
+        // kaptListNoSpace(공백 제거된 버전)를 기준으로 비교함 — 원본
+        // kaptList와 비교하면 우리 쪽 공백만 지운 이름은 못 맞음.
+        if (!name || name.length < 1) return null;
+        for (var i = 0; i < kaptListNoSpace.length; i++) {
+          const k = kaptListNoSpace[i][0];
+          if (k.endsWith(name) || k.endsWith(name + '아파트')) return kaptListNoSpace[i][1];
+        }
+        // "포함(contains)" 매칭은 이름이 짧을수록(특히 완전히 괄호를 지운
+        // 뒤의 이름, 예: "양지마을") 같은 계열의 서로 다른 단지 여러 개와
+        // 동시에 겹칠 수 있음 — 이럴 땐 "그중 아무거나 첫 번째"를 쓰면
+        // 실제로 다른 단지의 세대수/거리를 잘못 보여주는 게 더 나쁨. 그래서
+        // 겹치는 후보가 정확히 1개일 때만 채택하고, 2개 이상이면(어느 게
+        // 맞는지 알 수 없음) 차라리 매칭 안 된 것으로 남김(— 표시).
+        if (name.length >= 3) {
+          const hits = kaptListNoSpace.filter(function (pair) { return pair[0].indexOf(name) !== -1; });
+          if (hits.length === 1) return hits[0][1];
+        }
+        return null;
+      }
+      function findKaptCode(rawName) {
+        // 괄호 안 내용을 버린 버전과, 괄호만 없애고 안 내용은 붙여쓴 버전
+        // 둘 다 후보로 씀 — 후자가 더 구체적이라 먼저 시도함.
+        const concatName = rawName.replace(/\s*\(([^)]*)\)\s*/g, '$1').trim();
+        const strippedName = rawName.replace(/\s*\([^)]*\)\s*/g, '').trim();
+        const candidates = [rawName, concatName, strippedName];
+        for (var i = 0; i < candidates.length; i++) {
+          const c = candidates[i];
+          if (kaptByName[c]) return kaptByName[c];
+          const noSpace = c.replace(/\s+/g, '');
+          if (kaptByNameNoSpace[noSpace]) return kaptByNameNoSpace[noSpace];
+        }
+        for (var j = 0; j < candidates.length; j++) {
+          const found = findFuzzy(candidates[j].replace(/\s+/g, ''));
+          if (found) return found;
         }
         return null;
       }
       const molitKeyForKapt = env.MOLIT_API_KEY.indexOf('%') !== -1 ? decodeURIComponent(env.MOLIT_API_KEY) : env.MOLIT_API_KEY;
       await Promise.all(items.slice(0, KAPT_LOOKUP_LIMIT).map(async function (it) {
-        const cleanName = it.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
-        const noSpaceName = cleanName.replace(/\s+/g, '');
-        const kaptCode = kaptByName[cleanName] || kaptByName[it.name] || kaptByNameNoSpace[noSpaceName] || findByEndsWith(noSpaceName);
+        const kaptCode = findKaptCode(it.name);
         if (!kaptCode) { it.households = null; it.kaptInfo = null; return; }
         const [basis, detail] = await Promise.all([
           fetchKaptBasis(env, molitKeyForKapt, kaptCode),
