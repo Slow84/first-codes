@@ -996,7 +996,9 @@ async function handleRealEstateSearch(url, env) {
   // v12: nearby.bus(버스정류장 실거리) 필드 추가로 캐시 키 변경.
   // v13: 이름 매칭 로직 개선(괄호 안 내용 붙여쓰기/아파트 접미사/포함매칭)으로
   // 매칭 결과 자체가 바뀌어서 캐시 키 변경.
-  const cacheKey = 're-search13:' + lawdCd + ':' + budget;
+  // v14: 매칭 후보 생성 로직 추가 개선(괄호 순서 뒤집기, 숫자/단위어 분리)으로
+  // 매칭 결과가 또 바뀌어서 캐시 키 변경.
+  const cacheKey = 're-search14:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -1113,12 +1115,39 @@ async function handleRealEstateSearch(url, env) {
         }
         return null;
       }
+      // 2026-08-30 추가: "양지마을(3단지)(금호)" -> K-APT엔 "수내양지마을금호3차"
+      // 처럼, 국토부는 "단지번호"를 브랜드명보다 먼저 적지만 K-APT는 반대로
+      // "브랜드+차수" 순서로 적는 경우가 있어서(실제 확인함) 괄호 내용을
+      // 그대로/뒤집어서 붙인 버전 둘 다, 그리고 "3단지"에서 "단지"를 뗀
+      // "3"만 남긴 버전까지 후보로 만듦.
+      function buildCandidates(rawName) {
+        const groups = [];
+        const base = rawName.replace(/\s*\(([^)]*)\)\s*/g, function (m, inner) {
+          groups.push(inner.trim());
+          return '';
+        }).trim();
+        const candidates = [rawName, base];
+        if (groups.length) {
+          candidates.push(base + groups.join(''));
+          if (groups.length > 1) candidates.push(base + groups.slice().reverse().join(''));
+          const simplified = groups.map(function (g) {
+            const numMatch = g.match(/\d+/);
+            var word = g.replace(/\d+/, '').trim();
+            word = word.replace(/^(단지|차|동|호)/, '').trim(); // 숫자 뒤에 바로 붙는 단위어만 제거
+            return { num: numMatch ? numMatch[0] : '', word: word };
+          });
+          const words = simplified.map(function (s) { return s.word; }).filter(Boolean).join('');
+          const nums = simplified.map(function (s) { return s.num; }).filter(Boolean).join('');
+          if (words) candidates.push(base + words);
+          if (words && nums) {
+            candidates.push(base + words + nums);
+            candidates.push(base + nums + words);
+          }
+        }
+        return candidates.filter(function (c, i, arr) { return c && arr.indexOf(c) === i; });
+      }
       function findKaptCode(rawName) {
-        // 괄호 안 내용을 버린 버전과, 괄호만 없애고 안 내용은 붙여쓴 버전
-        // 둘 다 후보로 씀 — 후자가 더 구체적이라 먼저 시도함.
-        const concatName = rawName.replace(/\s*\(([^)]*)\)\s*/g, '$1').trim();
-        const strippedName = rawName.replace(/\s*\([^)]*\)\s*/g, '').trim();
-        const candidates = [rawName, concatName, strippedName];
+        const candidates = buildCandidates(rawName);
         for (var i = 0; i < candidates.length; i++) {
           const c = candidates[i];
           if (kaptByName[c]) return kaptByName[c];
