@@ -1206,7 +1206,11 @@ async function handleRealEstateSearch(url, env) {
         it._kaptCode = kaptCode;
         matchedItems.push(it);
       });
-      await runBatched(matchedItems, 8, 1100, async function (it) {
+      // 2026-09-01 튜닝: 격리된 상태로 직접 측정해본 결과 동시 16개는 안전,
+      // 24개부턴 일부 실패, 40개 이상은 전부 실패 + 몇 분간 잠기는 걸
+      // 확인함(실제로 겪음) — 그래서 항목당 2호출×8개=16개를 그대로 유지하고
+      // 배치 사이 대기시간만 살짝 줄임(더 키우는 건 잠금 위험이 커서 안 함).
+      await runBatched(matchedItems, 8, 1000, async function (it) {
         const [basis, detail] = await Promise.all([
           fetchKaptBasis(env, molitKeyForKapt, it._kaptCode),
           fetchKaptDetail(env, molitKeyForKapt, it._kaptCode)
@@ -1218,12 +1222,14 @@ async function handleRealEstateSearch(url, env) {
 
       // 관공서/병원/공원 실거리 — 세대수/학교이름과 같은 kaptCode 매칭 결과를
       // 재사용함(캐시가 있으면 fetchKakaoDistance 안에서 바로 재사용돼서 이
-      // 배치도 실제로는 대부분 새 호출 없이 끝남). fetchKakaoDistance 안에서도
-      // TAGO(버스정류소, data.go.kr) 호출이 하나 섞여있어서 이것도 같은 이유로
-      // 나눠서 보냄.
+      // 배치도 실제로는 대부분 새 호출 없이 끝남). fetchKakaoDistance 안에서
+      // 항목당 data.go.kr(TAGO) 호출은 딱 1개뿐이고 나머지 4개는 카카오라서
+      // (카카오는 지금까지 동시 50개를 보내도 실패한 적이 없었음 — 이 세션
+      // 앞부분의 real-estate-search 로그로 확인됨), 이 단계는 배치를
+      // 16개까지 키워도 data.go.kr 쪽 부담은 위 배치(16개 동시호출)와 같음.
       if (env.KAKAO_API_KEY) {
         const candidates = items.filter(function (it) { return it._kaptCode && it._addr; });
-        await runBatched(candidates, 8, 1100, async function (it) {
+        await runBatched(candidates, 16, 1000, async function (it) {
           it.nearby = await fetchKakaoDistance(env, it._kaptCode, it._addr, molitKeyForKapt);
         });
       }
