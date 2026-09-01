@@ -772,14 +772,25 @@ async function handleRealEstateAptListRefresh(request, env) {
 async function fetchKaptBasis(env, molitKey, kaptCode) {
   // v2: 주소(addr) 필드 추가로 캐시 모양이 바뀌어서 예전 캐시(re-kapt-basis:,
   // 숫자 하나만 저장돼 있음)를 그대로 읽으면 주소가 없는 채로 나옴 -> 키 변경.
-  const cacheKey = 're-kapt-basis2:' + kaptCode;
+  // v3: 일시적 오류를 60일 "데이터 없음"으로 잘못 캐시하던 버그를 고치면서,
+  // 이미 그렇게 잘못 캐시된 항목이 몇 개나 있는지 알 수 없어 키를 통째로 바꿔
+  // 전부 새로 받아오게 함(2026-09-01, "역삼푸르지오" 사례로 발견).
+  const cacheKey = 're-kapt-basis3:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return cached === 'null' ? null : JSON.parse(cached);
   try {
     const params = new URLSearchParams({ serviceKey: molitKey, kaptCode: kaptCode });
     const r = await fetch(KAPT_BASIS_URL + '?' + params.toString());
     const data = await r.json();
+    // resultCode가 "00"(정상)인데 item이 없으면 "이 코드는 진짜로 데이터가
+    // 없다"고 60일 캐시해도 안전하지만, resultCode가 없거나 "00"이 아니면
+    // (일시적 서버 오류·요청 제한 등) 진짜 데이터 없음이 아닐 수 있어서
+    // 캐시하지 않고 다음 요청 때 다시 시도하게 함 — 안 그러면 "역삼푸르지오"
+    // 사례처럼 한 번의 일시적 실패가 60일 동안 "정보 없음"으로 굳어버림
+    // (2026-09-01, 실제로 겪은 버그).
+    const resultCode = data.response && data.response.header && data.response.header.resultCode;
     const item = data.response && data.response.body && data.response.body.item;
+    if (!item && resultCode !== '00') return null; // 캐시 안 함, 다음에 재시도
     const result = item ? {
       households: item.kaptdaCnt ? parseInt(item.kaptdaCnt, 10) : null,
       addr: item.doroJuso || item.kaptAddr || null
@@ -798,14 +809,20 @@ async function fetchKaptDetail(env, molitKey, kaptCode) {
   // 예전 캐시(re-kapt-detail:)를 그대로 읽으면 새 필드가 없는 채로 60일간
   // 나올 수 있음 -> 캐시 키 자체를 바꿔서 새로 받아오게 함.
   // v3: 주차대수가 지상만 세던 버그를 고치면서 값 자체가 바뀌어서 캐시 키 변경.
-  const cacheKey = 're-kapt-detail3:' + kaptCode;
+  // v4: 일시적 오류를 60일 "데이터 없음"으로 잘못 캐시하던 버그 수정으로 키 변경
+  // (2026-09-01, "역삼푸르지오"가 이렇게 60일간 갇혀있던 걸 발견).
+  const cacheKey = 're-kapt-detail4:' + kaptCode;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return cached === 'null' ? null : JSON.parse(cached);
   try {
     const params = new URLSearchParams({ serviceKey: molitKey, kaptCode: kaptCode });
     const r = await fetch(KAPT_DETAIL_URL + '?' + params.toString());
     const data = await r.json();
+    // fetchKaptBasis와 같은 이유로 resultCode 확인 — "00"이 아니면 일시적
+    // 오류일 수 있어서 60일 캐시하지 않고 다음 요청 때 재시도함.
+    const resultCode = data.response && data.response.header && data.response.header.resultCode;
     const item = data.response && data.response.body && data.response.body.item;
+    if (!item && resultCode !== '00') return null;
     const detail = item ? {
       subwayLine: item.subwayLine || null,
       subwayStation: item.subwayStation || null,
@@ -998,7 +1015,8 @@ async function handleRealEstateSearch(url, env) {
   // 매칭 결과 자체가 바뀌어서 캐시 키 변경.
   // v14: 매칭 후보 생성 로직 추가 개선(괄호 순서 뒤집기, 숫자/단위어 분리)으로
   // 매칭 결과가 또 바뀌어서 캐시 키 변경.
-  const cacheKey = 're-search14:' + lawdCd + ':' + budget;
+  // v15: 일시적 오류가 60일 "데이터 없음"으로 굳어버리던 캐시 버그 수정으로 키 변경.
+  const cacheKey = 're-search15:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
