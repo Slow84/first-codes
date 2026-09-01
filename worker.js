@@ -1016,7 +1016,9 @@ async function handleRealEstateSearch(url, env) {
   // v14: 매칭 후보 생성 로직 추가 개선(괄호 순서 뒤집기, 숫자/단위어 분리)으로
   // 매칭 결과가 또 바뀌어서 캐시 키 변경.
   // v15: 일시적 오류가 60일 "데이터 없음"으로 굳어버리던 캐시 버그 수정으로 키 변경.
-  const cacheKey = 're-search15:' + lawdCd + ':' + budget;
+  // v16: 방금 전 배포에서 data.go.kr 초당 요청 제한에 걸려 실패한 검색 결과가
+  // 이미 re-search15로 캐시돼 있을 수 있어(6시간) 키 변경.
+  const cacheKey = 're-search16:' + lawdCd + ':' + budget;
   const cached = await env.DATA.get(cacheKey);
   if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 
@@ -1179,27 +1181,51 @@ async function handleRealEstateSearch(url, env) {
         return null;
       }
       const molitKeyForKapt = env.MOLIT_API_KEY.indexOf('%') !== -1 ? decodeURIComponent(env.MOLIT_API_KEY) : env.MOLIT_API_KEY;
-      await Promise.all(items.slice(0, KAPT_LOOKUP_LIMIT).map(async function (it) {
+      // 2026-09-01: Cloudflare 쪽 요청 한도(Paid 플랜, 요청당 10,000개)는
+      // 넉넉해졌지만, data.go.kr(국토부) API 자체가 "초당 요청 제한"을 따로
+      // 걸어둠 — Promise.all로 50개(최대 100건 호출)를 한꺼번에 쏘면 그
+      // 초당 한도에 걸려서 전부 실패하는 걸 실제로 확인함("역삼푸르지오"가
+      // 매칭까지는 되는데 세대수/상세정보 호출이 전부 막히는 걸 wrangler
+      // tail로 직접 봄). 그래서 한 번에 다 쏘지 않고 작은 묶음(batch)으로
+      // 나눠서, 묶음 사이에 짧게 쉬었다 보내도록 바꿈.
+      function runBatched(list, batchSize, delayMs, fn) {
+        return (async function () {
+          for (let i = 0; i < list.length; i += batchSize) {
+            const batch = list.slice(i, i + batchSize);
+            await Promise.all(batch.map(fn));
+            if (i + batchSize < list.length) {
+              await new Promise(function (resolve) { setTimeout(resolve, delayMs); });
+            }
+          }
+        })();
+      }
+      const matchedItems = [];
+      items.slice(0, KAPT_LOOKUP_LIMIT).forEach(function (it) {
         const kaptCode = findKaptCode(it.name);
         if (!kaptCode) { it.households = null; it.kaptInfo = null; return; }
+        it._kaptCode = kaptCode;
+        matchedItems.push(it);
+      });
+      await runBatched(matchedItems, 8, 1100, async function (it) {
         const [basis, detail] = await Promise.all([
-          fetchKaptBasis(env, molitKeyForKapt, kaptCode),
-          fetchKaptDetail(env, molitKeyForKapt, kaptCode)
+          fetchKaptBasis(env, molitKeyForKapt, it._kaptCode),
+          fetchKaptDetail(env, molitKeyForKapt, it._kaptCode)
         ]);
         it.households = basis ? basis.households : null;
         it.kaptInfo = detail;
-        it._kaptCode = kaptCode;
         it._addr = basis ? basis.addr : null;
-      }));
+      });
 
       // 관공서/병원/공원 실거리 — 세대수/학교이름과 같은 kaptCode 매칭 결과를
-      // 재사용함. Paid 플랜 이후로는 한도 걱정 없이 매칭된 항목 전부 그 자리에서
-      // 계산함(캐시가 있으면 fetchKakaoDistance 안에서 바로 재사용됨).
+      // 재사용함(캐시가 있으면 fetchKakaoDistance 안에서 바로 재사용돼서 이
+      // 배치도 실제로는 대부분 새 호출 없이 끝남). fetchKakaoDistance 안에서도
+      // TAGO(버스정류소, data.go.kr) 호출이 하나 섞여있어서 이것도 같은 이유로
+      // 나눠서 보냄.
       if (env.KAKAO_API_KEY) {
         const candidates = items.filter(function (it) { return it._kaptCode && it._addr; });
-        await Promise.all(candidates.map(async function (it) {
+        await runBatched(candidates, 8, 1100, async function (it) {
           it.nearby = await fetchKakaoDistance(env, it._kaptCode, it._addr, molitKeyForKapt);
-        }));
+        });
       }
       items.forEach(function (it) { delete it._kaptCode; delete it._addr; });
     }
