@@ -169,33 +169,24 @@
     </div>
 
     <div id="searchStatus" style="margin-top:20px; font-size:14px; color:var(--text-muted);"></div>
-    <p style="margin:6px 0 0; font-size:12.5px; color:var(--text-muted);">→ 표가 넓어서 옆으로 밀어야 다 보여요. "동/아파트/거래가" 칸은 계속 고정돼요.</p>
+    <p style="margin:6px 0 0; font-size:12.5px; color:var(--text-muted);">→ 표가 넓어서 옆으로 밀어야 다 보여요. "아파트" 칸은 계속 고정돼요.</p>
 
     <style>
       /* 표가 18칸이나 돼서 폰에서 옆으로 많이 밀어야 하는데, 밀다 보면 지금
-         어느 줄(어느 동/아파트/가격)을 보고 있는지 헷갈리기 쉬움 — 앞 3칸
-         (동/아파트/거래가)을 옆으로 안 움직이게 고정해서 기준점 역할을 하게
-         함. 여러 칸을 동시에 고정하려면 각 칸의 left 값이 "그 앞에 고정된
-         칸들의 너비 합"이어야 해서, 폭을 고정값으로 정해둬야 계산이 어긋나지
-         않음(안 그러면 칸 너비가 내용에 따라 바뀔 때 고정된 칸끼리 겹침).
-         다른 표(.data-table 쓰는 다른 페이지)엔 영향 안 가도록 #resultTable로만
+         어느 줄(어느 아파트)을 보고 있는지 헷갈리기 쉬움 — "아파트" 한 칸만
+         고정해서 기준점 역할을 하게 함(동/거래가까지 같이 고정했더니 화면을
+         너무 많이 차지한다는 피드백으로 아파트 한 칸만 남김). 다른 표
+         (.data-table 쓰는 다른 페이지)엔 영향 안 가도록 #resultTable로만
          범위를 좁힘.
       */
-      #resultTable th:nth-child(-n+3), #resultTable td:nth-child(-n+3) {
+      #resultTable th:first-child, #resultTable td:first-child {
         position: sticky;
+        left: 0;
+        width: 130px; min-width: 130px; max-width: 130px;
         background: var(--bg);
+        box-shadow: 2px 0 4px rgba(0,0,0,0.08);
         z-index: 1;
-      }
-      #resultTable th:nth-child(1), #resultTable td:nth-child(1) {
-        left: 0; width: 46px; min-width: 46px; max-width: 46px;
-      }
-      #resultTable th:nth-child(2), #resultTable td:nth-child(2) {
-        left: 46px; width: 150px; min-width: 150px; max-width: 150px;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      }
-      #resultTable th:nth-child(3), #resultTable td:nth-child(3) {
-        left: 196px; width: 62px; min-width: 62px; max-width: 62px;
-        box-shadow: 2px 0 4px rgba(0,0,0,0.08); /* 고정된 마지막 칸에만 그림자 */
       }
       /* 칸 사이 여백(padding)이 18칸에 그대로 다 곱해지면서 전체 폭이
          불필요하게 넓어져 스크롤 거리가 길어짐 — 기본 .data-table의
@@ -219,8 +210,8 @@
     <div class="table-wrap" style="margin-top:12px; -webkit-overflow-scrolling:touch;">
       <table class="data-table" id="resultTable" style="display:none;">
         <thead><tr>
-          <th data-sort="dong">동</th>
           <th data-sort="name" style="text-align:left;">아파트</th>
+          <th data-sort="dong">동</th>
           <th data-sort="dealAmount">거래가</th>
           <th data-sort="households">세대수</th>
           <th data-sort="parking">주차대수</th>
@@ -511,8 +502,8 @@
       busText = withDist(it.nearby.bus, busText);
     }
     return '<tr>' +
-      '<td>' + it.dong + '</td>' +
       '<td style="text-align:left;"><strong>' + it.name + '</strong></td>' +
+      '<td>' + it.dong + '</td>' +
       '<td>' + fmtEok(it.dealAmount) + '</td>' +
       '<td>' + (it.households ? it.households + '세대' : '—') + '</td>' +
       '<td>' + parkingText + '</td>' +
