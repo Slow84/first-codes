@@ -10,3 +10,5 @@ CLAUDE.md
 *.exe
 *.msi
 MD
+.agents
+skills-lock.json
